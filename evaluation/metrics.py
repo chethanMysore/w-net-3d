@@ -73,9 +73,6 @@ class SoftNCutsLoss(nn.Module):
         """
         A = SoftNCutsLoss._outer_product(flatten_patch, torch.ones_like(flatten_patch))
         intensity_weight = torch.exp(-1 * torch.square((torch.divide((A - A.T), std_intensity))))
-
-        print(self.dist_weight.shape)
-        print(intensity_weight.shape)
         weight = torch.multiply(intensity_weight, self.dist_weight.float().cuda())
         return weight
 

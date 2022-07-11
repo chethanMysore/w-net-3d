@@ -185,10 +185,12 @@ class Pipeline:
                     soft_ncut_loss = torch.tensor(0.0001).float().cuda()
                     for idx, patch in enumerate(local_batch):
                         soft_ncut_loss += self.soft_ncut_loss(patch, class_preds[idx], self.num_classes)
+                        torch.cuda.empty_cache()
                     if not torch.any(torch.isnan(soft_ncut_loss)):
                         soft_ncut_loss = soft_ncut_loss / len(local_batch)
                     reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch).float().cuda()
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
+                    torch.cuda.empty_cache()
 
                 # except Exception as error:
                 #     self.logger.exception(error)
