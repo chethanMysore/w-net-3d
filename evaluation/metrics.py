@@ -39,7 +39,7 @@ class SoftNCutsLoss(nn.Module):
 
         sq_distance_matrix = torch.square(xi_xj) + torch.square(yi_yj) + torch.square(zi_zj)
 
-        self.dist_weight = torch.exp(-torch.divide(sq_distance_matrix, torch.square(torch.tensor(std_position)))).float().cuda()
+        self.dist_weight = torch.exp(-torch.divide(sq_distance_matrix, torch.square(torch.tensor(std_position))))
 
     @staticmethod
     def _outer_product(v1, v2):
@@ -72,9 +72,8 @@ class SoftNCutsLoss(nn.Module):
         n : number of pixels
         """
         A = SoftNCutsLoss._outer_product(flatten_patch, torch.ones_like(flatten_patch))
-        intensity_weight = torch.exp(-1 * torch.square((torch.divide((A - A.T), std_intensity))))
-        weight = torch.multiply(intensity_weight, self.dist_weight)
-        return weight
+        intensity_weight = torch.exp(-1 * torch.square((torch.divide((A - A.T), std_intensity)))).detach().cpu()
+        return torch.multiply(intensity_weight, self.dist_weight)
 
     @staticmethod
     def _numerator(k_class_prob, weights):
@@ -114,13 +113,14 @@ class SoftNCutsLoss(nn.Module):
         flatten_patch = torch.flatten(patch)
         soft_n_cut_loss = k
         weights = self._edge_weights(flatten_patch)
+        prob = prob.detch().cpu()
 
         for t in range(k):
             soft_n_cut_loss = soft_n_cut_loss - (
                     SoftNCutsLoss._numerator(prob[:, :, :, t], weights) / SoftNCutsLoss._denominator(prob[:, :, :, t],
                                                                                                      weights))
 
-        return soft_n_cut_loss
+        return soft_n_cut_loss.float().cuda()
 
 
 class ReconstructionLoss(nn.Module):
