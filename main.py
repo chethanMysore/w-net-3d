@@ -23,6 +23,7 @@ __maintainer__ = "Chethan Radhakrishna"
 __email__ = "chethan.radhakrishna@st.ovgu.de"
 __status__ = "Development"
 
+torch.autograd.set_detect_anomaly(True)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 torch.manual_seed(2022)
