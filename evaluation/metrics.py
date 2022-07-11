@@ -113,7 +113,7 @@ class SoftNCutsLoss(nn.Module):
         flatten_patch = torch.flatten(patch)
         soft_n_cut_loss = k
         weights = self._edge_weights(flatten_patch)
-        prob = prob.detch().cpu()
+        prob = prob.cpu()
 
         for t in range(k):
             soft_n_cut_loss = soft_n_cut_loss - (
