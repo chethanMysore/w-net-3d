@@ -39,7 +39,7 @@ class SoftNCutsLoss(nn.Module):
 
         sq_distance_matrix = torch.square(xi_xj) + torch.square(yi_yj) + torch.square(zi_zj)
 
-        self.dist_weight = torch.exp(-torch.divide(sq_distance_matrix, torch.square(torch.tensor(std_position))))
+        self.dist_weight = torch.exp(-torch.divide(sq_distance_matrix, torch.square(torch.tensor(std_position)))).float().cuda()
 
     @staticmethod
     def _outer_product(v1, v2):
@@ -73,7 +73,7 @@ class SoftNCutsLoss(nn.Module):
         """
         A = SoftNCutsLoss._outer_product(flatten_patch, torch.ones_like(flatten_patch))
         intensity_weight = torch.exp(-1 * torch.square((torch.divide((A - A.T), std_intensity))))
-        weight = torch.multiply(intensity_weight, self.dist_weight.float().cuda())
+        weight = torch.multiply(intensity_weight, self.dist_weight)
         return weight
 
     @staticmethod
