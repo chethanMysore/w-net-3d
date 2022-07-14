@@ -10,7 +10,7 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
 from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss)
-from torchmetrics import StructuralSimilarityIndexMeasure
+from torchmetrics.functional import structural_similarity_index_measure
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
 
@@ -60,7 +60,7 @@ class Pipeline:
 
         # Following metrics can be used to evaluate
         self.soft_ncut_loss = SoftNCutsLoss(self.patch_size, self.patch_size, self.patch_size)
-        self.ssim = StructuralSimilarityIndexMeasure()
+        self.ssim = structural_similarity_index_measure
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
