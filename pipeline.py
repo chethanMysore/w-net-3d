@@ -257,14 +257,26 @@ class Pipeline:
                                 reconstruction_loss=total_reconstr_loss,
                                 total_loss=total_loss)
 
-            save_model(self.CHECKPOINT_PATH, {
-                'epoch_type': 'last',
-                'epoch': epoch,
-                # Let is always overwrite, we need just the last checkpoint and best checkpoint(saved after validate)
-                'state_dict': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'amp': self.scaler.state_dict()
-            })
+            if self.with_apex:
+                save_model(self.CHECKPOINT_PATH, {
+                    'epoch_type': 'last',
+                    'epoch': epoch,
+                    # Let is always overwrite, we need just the last checkpoint and best checkpoint(saved after validate)
+                    'state_dict': self.model.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'amp': self.scaler.state_dict()
+                })
+            else:
+                save_model(self.CHECKPOINT_PATH, {
+                    'epoch_type': 'last',
+                    'epoch': epoch,
+                    # Let is always overwrite, we need just the last checkpoint and best checkpoint(saved after validate)
+                    'state_dict': self.model.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'amp': None
+                })
+
+
 
             torch.cuda.empty_cache()  # to avoid memory errors
             self.validate(training_batch_index, epoch)
@@ -342,12 +354,20 @@ class Pipeline:
             self.logger.info(
                 'Best metric... @ epoch:' + str(training_index) + ' Current Lowest loss:' + str(self.LOWEST_LOSS))
 
-            save_model(self.CHECKPOINT_PATH, {
-                'epoch_type': 'best',
-                'epoch': epoch,
-                'state_dict': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'amp': self.scaler.state_dict()})
+            if self.with_apex:
+                save_model(self.CHECKPOINT_PATH, {
+                    'epoch_type': 'best',
+                    'epoch': epoch,
+                    'state_dict': self.model.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'amp': self.scaler.state_dict()})
+            else:
+                save_model(self.CHECKPOINT_PATH, {
+                    'epoch_type': 'best',
+                    'epoch': epoch,
+                    'state_dict': self.model.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'amp': None})
 
     def test(self, test_logger, test_subjects=None, save_results=True):
         test_logger.debug('Testing...')
