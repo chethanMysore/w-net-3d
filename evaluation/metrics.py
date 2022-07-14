@@ -23,9 +23,9 @@ __status__ = "Development"
 class SoftNCutsLoss(nn.Module):
     def __init__(self, depth, length, width, std_position=1):
         super(SoftNCutsLoss, self).__init__()
-        meshgrid_x, meshgrid_y, meshgrid_z = torch.meshgrid(torch.arange(0, depth - 1),
-                                                            torch.arange(0, length - 1),
-                                                            torch.arange(0, width - 1))
+        meshgrid_x, meshgrid_y, meshgrid_z = torch.meshgrid(torch.arange(0, depth),
+                                                            torch.arange(0, length),
+                                                            torch.arange(0, width))
         meshgrid_x = torch.reshape(meshgrid_x, (length * width * depth,))
         meshgrid_y = torch.reshape(meshgrid_y, (length * width * depth,))
         meshgrid_z = torch.reshape(meshgrid_z, (length * width * depth,))
