@@ -10,6 +10,7 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
 from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss)
+from torchmetrics import StructuralSimilarityIndexMeasure
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
 
@@ -59,7 +60,7 @@ class Pipeline:
 
         # Following metrics can be used to evaluate
         self.soft_ncut_loss = SoftNCutsLoss(self.patch_size, self.patch_size, self.patch_size)
-        self.reconstruction_loss = ReconstructionLoss()
+        self.ssim = StructuralSimilarityIndexMeasure()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -188,7 +189,7 @@ class Pipeline:
                         torch.cuda.empty_cache()
                     if not torch.any(torch.isnan(soft_ncut_loss)):
                         soft_ncut_loss = soft_ncut_loss / len(local_batch)
-                    reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch).float().cuda()
+                    reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
 
@@ -303,7 +304,7 @@ class Pipeline:
                             soft_ncut_loss = self.soft_ncut_loss(patch, class_preds[idx], self.num_classes)
                         if not torch.any(torch.isnan(soft_ncut_loss)):
                             soft_ncut_loss = soft_ncut_loss / len(local_batch)
-                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch).float().cuda()
+                        reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
 
