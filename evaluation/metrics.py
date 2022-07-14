@@ -23,15 +23,15 @@ __status__ = "Development"
 class SoftNCutsLoss(nn.Module):
     def __init__(self, depth, length, width, std_position=1):
         super(SoftNCutsLoss, self).__init__()
-        meshgrid_x, meshgrid_y, meshgrid_z = torch.meshgrid(torch.arange(0, depth),
-                                                            torch.arange(0, length),
-                                                            torch.arange(0, width))
+        meshgrid_x, meshgrid_y, meshgrid_z = torch.meshgrid(torch.arange(0, depth, dtype=float),
+                                                            torch.arange(0, length, dtype=float),
+                                                            torch.arange(0, width, dtype=float))
         meshgrid_x = torch.reshape(meshgrid_x, (length * width * depth,))
         meshgrid_y = torch.reshape(meshgrid_y, (length * width * depth,))
         meshgrid_z = torch.reshape(meshgrid_z, (length * width * depth,))
-        A_x = SoftNCutsLoss._outer_product(meshgrid_x, torch.ones(meshgrid_x.size()))
-        A_y = SoftNCutsLoss._outer_product(meshgrid_y, torch.ones(meshgrid_y.size()))
-        A_z = SoftNCutsLoss._outer_product(meshgrid_z, torch.ones(meshgrid_z.size()))
+        A_x = SoftNCutsLoss._outer_product(meshgrid_x, torch.ones(meshgrid_x.size(), dtype=meshgrid_x.dtype, device=meshgrid_x.device))
+        A_y = SoftNCutsLoss._outer_product(meshgrid_y, torch.ones(meshgrid_y.size(), dtype=meshgrid_y.dtype, device=meshgrid_y.device))
+        A_z = SoftNCutsLoss._outer_product(meshgrid_z, torch.ones(meshgrid_z.size(), dtype=meshgrid_z.dtype, device=meshgrid_z.device))
 
         del meshgrid_x, meshgrid_y, meshgrid_z
 
