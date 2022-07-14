@@ -54,7 +54,7 @@ class SoftNCutsLoss(nn.Module):
         v2 = torch.reshape(v2, (-1,))
         v1 = torch.unsqueeze(v1, 0)
         v2 = torch.unsqueeze(v2, 0)
-        return torch.matmul(torch.transpose(v1, 0, 1), v2)
+        return torch.matmul(v1.T, v2)
 
     def _edge_weights(self, flatten_patch, std_intensity=3):
         """
@@ -120,6 +120,8 @@ class SoftNCutsLoss(nn.Module):
                     SoftNCutsLoss._numerator(prob[:, :, :, t], weights) / SoftNCutsLoss._denominator(prob[:, :, :, t],
                                                                                                      weights))
 
+        del weights
+        del flatten_patch
         return soft_n_cut_loss.float().cuda()
 
 
