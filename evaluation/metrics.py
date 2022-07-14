@@ -23,21 +23,25 @@ __status__ = "Development"
 class SoftNCutsLoss(nn.Module):
     def __init__(self, depth, length, width, std_position=1):
         super(SoftNCutsLoss, self).__init__()
-        self.meshgrid_x, self.meshgrid_y, self.meshgrid_z = torch.meshgrid(torch.range(0, depth-1),
+        meshgrid_x, meshgrid_y, meshgrid_z = torch.meshgrid(torch.range(0, depth-1),
                                                                            torch.range(0, length-1),
                                                                            torch.range(0, width-1))
-        self.meshgrid_x = torch.reshape(self.meshgrid_x, (length * width * depth,))
-        self.meshgrid_y = torch.reshape(self.meshgrid_y, (length * width * depth,))
-        self.meshgrid_z = torch.reshape(self.meshgrid_z, (length * width * depth,))
-        A_x = SoftNCutsLoss._outer_product(self.meshgrid_x, torch.ones_like(self.meshgrid_x))
-        A_y = SoftNCutsLoss._outer_product(self.meshgrid_y, torch.ones_like(self.meshgrid_y))
-        A_z = SoftNCutsLoss._outer_product(self.meshgrid_z, torch.ones_like(self.meshgrid_z))
+        meshgrid_x = torch.reshape(meshgrid_x, (length * width * depth,))
+        meshgrid_y = torch.reshape(meshgrid_y, (length * width * depth,))
+        meshgrid_z = torch.reshape(meshgrid_z, (length * width * depth,))
+        A_x = SoftNCutsLoss._outer_product(meshgrid_x, torch.ones(meshgrid_x.size()))
+        A_y = SoftNCutsLoss._outer_product(meshgrid_y, torch.ones(meshgrid_y.size()))
+        A_z = SoftNCutsLoss._outer_product(meshgrid_z, torch.ones(meshgrid_z.size()))
 
-        xi_xj = A_x - A_x.T
-        yi_yj = A_y - A_y.T
-        zi_zj = A_z - A_z.T
+        del meshgrid_x, meshgrid_y, meshgrid_z
+
+        xi_xj = A_x - A_x.permute(1, 0)
+        yi_yj = A_y - A_y.permute(1, 0)
+        zi_zj = A_z - A_z.permute(1, 0)
 
         sq_distance_matrix = torch.square(xi_xj) + torch.square(yi_yj) + torch.square(zi_zj)
+
+        del A_x, A_y, A_z, xi_xj, yi_yj, zi_zj
 
         self.dist_weight = torch.exp(-torch.divide(sq_distance_matrix, torch.square(torch.tensor(std_position))))
 
