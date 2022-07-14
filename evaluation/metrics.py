@@ -73,6 +73,7 @@ class SoftNCutsLoss(nn.Module):
         """
         A = SoftNCutsLoss._outer_product(flatten_patch, torch.ones_like(flatten_patch))
         intensity_weight = torch.exp(-1 * torch.square((torch.divide((A - A.T), std_intensity)))).detach().cpu()
+        del A
         return torch.multiply(intensity_weight, self.dist_weight)
 
     @staticmethod
@@ -110,6 +111,7 @@ class SoftNCutsLoss(nn.Module):
         Output :
         soft_n_cut_loss tensor for a single image
         """
+        print("Computing Soft Ncut Loss...")
         flatten_patch = torch.flatten(patch)
         soft_n_cut_loss = k
         weights = self._edge_weights(flatten_patch)
@@ -122,6 +124,7 @@ class SoftNCutsLoss(nn.Module):
 
         del weights
         del flatten_patch
+        print("Loss: {}".format(str(soft_n_cut_loss)))
         return soft_n_cut_loss.float().cuda()
 
 
