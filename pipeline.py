@@ -189,8 +189,6 @@ class Pipeline:
                         torch.cuda.empty_cache()
                     if not torch.any(torch.isnan(soft_ncut_loss)):
                         soft_ncut_loss = soft_ncut_loss / len(local_batch)
-                    print(torch.any(torch.isnan(reconstructed_patch)))
-                    print(torch.any(torch.isnan(local_batch)))
                     reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
