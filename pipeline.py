@@ -184,6 +184,7 @@ class Pipeline:
                     class_preds, reconstructed_patch = self.model(local_batch)
                     class_preds = torch.movedim(class_preds, 1, -1)
                     soft_ncut_loss = torch.tensor(0.0001).float().cuda()
+                    reconstruction_loss = torch.tensor(0.0001).float().cuda()
                     for idx, patch in enumerate(local_batch):
                         soft_ncut_loss += self.soft_ncut_loss(patch, class_preds[idx], self.num_classes)
                         torch.cuda.empty_cache()
@@ -306,19 +307,25 @@ class Pipeline:
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                 local_batch = torch.movedim(local_batch, -1, -3)
+                soft_ncut_loss = torch.tensor(0.0001).float().cuda()
+                reconstruction_loss = torch.tensor(0.0001).float().cuda()
+                loss = torch.tensor(0.0001).float().cuda()
 
                 try:
                     with autocast(enabled=self.with_apex):
-                        # Forward propagation
+                        # Get the classification response map(normalized) and respective class assignments after argmax
                         class_preds, reconstructed_patch = self.model(local_batch)
-                        soft_ncut_loss = torch.tensor(0.0001).float().cuda()
+                        class_preds = torch.movedim(class_preds, 1, -1)
+
                         for idx, patch in enumerate(local_batch):
-                            soft_ncut_loss = self.soft_ncut_loss(patch, class_preds[idx], self.num_classes)
+                            soft_ncut_loss += self.soft_ncut_loss(patch, class_preds[idx], self.num_classes)
+                            torch.cuda.empty_cache()
                         if not torch.any(torch.isnan(soft_ncut_loss)):
                             soft_ncut_loss = soft_ncut_loss / len(local_batch)
                         reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
+                        torch.cuda.empty_cache()
 
                 except Exception as error:
                     self.logger.exception(error)
