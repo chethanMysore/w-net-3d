@@ -59,7 +59,13 @@ class Pipeline:
         self.reconstr_loss_coeff = cmd_args.reconstr_loss_coeff
 
         # Following metrics can be used to evaluate
-        self.soft_ncut_loss = SoftNCutsLoss(self.patch_size, self.patch_size, self.patch_size)
+        self.radius = cmd_args.radius
+        self.sigmaI = cmd_args.sigmaI
+        self.sigmaX = cmd_args.sigmaX
+        self.soft_ncut_loss = SoftNCutsLoss(radius=4, sigmaI=10, sigmaX=4, num_classes=6, ip_shape=(self.batch_size, 1,
+                                                                                                    self.patch_size,
+                                                                                                    self.patch_size,
+                                                                                                    self.patch_size))
         self.ssim = structural_similarity_index_measure
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
@@ -73,6 +79,7 @@ class Pipeline:
         self.logger.info("Model Hyper Params: ")
         self.logger.info("\nLearning Rate: " + str(self.learning_rate))
         self.logger.info("\nNumber of Convolutional Blocks: " + str(cmd_args.num_conv))
+        self.predictor_subject_name = cmd_args.predictor_subject_name
 
         if cmd_args.train:  # Only if training is to be performed
             training_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/train/',
@@ -182,14 +189,13 @@ class Pipeline:
                 with autocast(enabled=self.with_apex):
                     # Get the classification response map(normalized) and respective class assignments after argmax
                     class_preds, reconstructed_patch = self.model(local_batch)
-                    class_preds = torch.movedim(class_preds, 1, -1)
                     soft_ncut_loss = torch.tensor(0.0001).float().cuda()
                     reconstruction_loss = torch.tensor(0.0001).float().cuda()
-                    for idx, patch in enumerate(local_batch):
-                        soft_ncut_loss += self.soft_ncut_loss(patch, class_preds[idx], self.num_classes)
-                        torch.cuda.empty_cache()
+                    soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                     if not torch.any(torch.isnan(soft_ncut_loss)):
-                        soft_ncut_loss = soft_ncut_loss / len(local_batch)
+                        soft_ncut_loss = torch.mean(soft_ncut_loss)
+                    else:
+                        soft_ncut_loss = torch.tensor(0.0001).float().cuda()
                     reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
@@ -277,8 +283,6 @@ class Pipeline:
                     'amp': None
                 })
 
-
-
             torch.cuda.empty_cache()  # to avoid memory errors
             self.validate(training_batch_index, epoch)
             torch.cuda.empty_cache()  # to avoid memory errors
@@ -315,13 +319,13 @@ class Pipeline:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
                         class_preds, reconstructed_patch = self.model(local_batch)
-                        class_preds = torch.movedim(class_preds, 1, -1)
-
-                        for idx, patch in enumerate(local_batch):
-                            soft_ncut_loss += self.soft_ncut_loss(patch, class_preds[idx], self.num_classes)
-                            torch.cuda.empty_cache()
+                        soft_ncut_loss = torch.tensor(0.0001).float().cuda()
+                        reconstruction_loss = torch.tensor(0.0001).float().cuda()
+                        soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         if not torch.any(torch.isnan(soft_ncut_loss)):
-                            soft_ncut_loss = soft_ncut_loss / len(local_batch)
+                            soft_ncut_loss = torch.mean(soft_ncut_loss)
+                        else:
+                            soft_ncut_loss = torch.tensor(0.0001).float().cuda()
                         reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
@@ -435,8 +439,8 @@ class Pipeline:
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                         for seg in range(self.num_classes):
-                            seg = seg+1
-                            seg_indices = torch.where(class_assignments == seg-1)
+                            seg = seg + 1
+                            seg_indices = torch.where(class_assignments == seg - 1)
                             class_assignments[seg_indices] = int(255 / seg)
                         # seg3_indices = torch.where(class_assignments == 3)
                         # class_assignments[seg3_indices] = 0
@@ -495,3 +499,67 @@ class Pipeline:
         subject = tio.Subject(**sub_dict)
 
         self.test(predict_logger, test_subjects=[subject], save_results=True)
+
+    def extract_segmentation(self, class_preds):
+        print("Analysing predictions...")
+        # result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
+        # ignore, class_preds_max = torch.max(class_preds, 0)
+        # class_preds_normalised = class_preds_max.numpy().astype(np.uint16)
+        # save_nifti(class_preds_normalised, os.path.join(result_root, self.predictor_subject_name + "_WNET_seg.nii.gz"))
+
+        # def cal_weight(self, raw_data, shape):
+
+        radius = 4
+        sigmaI = 10
+        sigmaX = 4
+        num_classes = 6
+        patch = torch.ones(15, 1, 32, 32, 32)
+        shape = patch.shape
+        preds = torch.ones(15, num_classes, 32, 32, 32) / num_classes
+        const_padding = torch.nn.ConstantPad3d(radius - 1, 0)
+        padded_preds = const_padding(preds)
+        # According to the weight formula, when Euclidean distance < r,the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
+        print("calculating weights.")
+        dissim = torch.zeros(
+            (shape[0], shape[1], shape[2], shape[3], shape[4], (radius - 1) * 2 + 1, (radius - 1) * 2 + 1,
+             (radius - 1) * 2 + 1))
+        padded_patch = torch.from_numpy(np.pad(patch, (
+            (0, 0), (0, 0), (radius - 1, radius - 1), (radius - 1, radius - 1), (radius - 1, radius - 1)), 'constant'))
+        for x in range(2 * (radius - 1) + 1):
+            for y in range(2 * (radius - 1) + 1):
+                for z in range(2 * (radius - 1) + 1):
+                    dissim[:, :, :, :, :, x, y, z] = patch - padded_patch[:, :, x:shape[2] + x, y:shape[3] + y, z:shape[4] + z]
+
+        temp_dissim = torch.exp(-1 * torch.square(dissim) / sigmaI ** 2)
+        dist = torch.zeros((2 * (radius - 1) + 1, 2 * (radius - 1) + 1, 2 * (radius - 1) + 1))
+        for x in range(1 - radius, radius):
+            for y in range(1 - radius, radius):
+                for z in range(1 - radius, radius):
+                    if x ** 2 + y ** 2 + z ** 2 < radius ** 2:
+                        dist[x + radius - 1, y + radius - 1, z + radius - 1] = np.exp(
+                            -(x ** 2 + y ** 2 + z ** 2) / sigmaX ** 2)
+
+        print("weight calculated.")
+        weight = torch.multiply(temp_dissim, dist)
+        sum_weight = weight.sum(-1).sum(-1).sum(-1)
+
+        # too many values to unpack
+        cropped_seg = []
+        for x in torch.arange((radius - 1) * 2 + 1, dtype=torch.long):
+            width = []
+            for y in torch.arange((radius - 1) * 2 + 1, dtype=torch.long):
+                depth = []
+                for z in torch.arange((radius - 1) * 2 + 1, dtype=torch.long):
+                    depth.append(padded_preds[:, :, x:x + preds.size()[2], y:y + preds.size()[3], z:z + preds.size()[4]].clone())
+                width.append(torch.stack(depth, 5))
+            cropped_seg.append(torch.stack(width, 5))
+        cropped_seg = torch.stack(cropped_seg, 5)
+        multi1 = cropped_seg.mul(weight)
+        multi2 = multi1.sum(-1).sum(-1).sum(-1).mul(preds)
+        multi3 = sum_weight.mul(preds)
+        assocA = multi2.view(multi2.shape[0], multi2.shape[1], -1).sum(-1)
+        assocV = multi3.view(multi3.shape[0], multi3.shape[1], -1).sum(-1)
+        assoc = assocA.div(assocV).sum(-1)
+        soft_ncut_loss = torch.add(-assoc, num_classes)
+
+

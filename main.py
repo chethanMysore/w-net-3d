@@ -129,6 +129,21 @@ if __name__ == '__main__':
                         type=float,
                         default=0.3,
                         help="loss coefficient for reconstruction loss")
+    parser.add_argument("-predictor_subject_name",
+                        default="test_subject",
+                        help="subject name of the predictor image")
+    parser.add_argument("-radius",
+                        type=float,
+                        default=4,
+                        help="radius of the voxel")
+    parser.add_argument("-sigmaI",
+                        type=float,
+                        default=10,
+                        help="SigmaI")
+    parser.add_argument("-sigmaX",
+                        type=float,
+                        default=4,
+                        help="SigmaX")
 
     args = parser.parse_args()
 
@@ -175,7 +190,9 @@ if __name__ == '__main__':
 
     # loading existing checkpoint if supplied
     if bool(LOAD_PATH):
+        torch.cuda.empty_cache()
         pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
+        torch.cuda.empty_cache()
  
     try:
 
@@ -190,8 +207,10 @@ if __name__ == '__main__':
             torch.cuda.empty_cache()  # to avoid memory errors
 
         if args.predict:
-            pipeline.predict(predict_logger=test_logger, image_path=args.predictor_path,
-                             label_path=args.predictor_label_path)
+            # pipeline.predict(predict_logger=test_logger, image_path=args.predictor_path,
+            #                  label_path=args.predictor_label_path)
+            class_preds = torch.load(args.predictor_path)
+            pipeline.extract_segmentation(class_preds)
 
     except Exception as error:
         print(error)
