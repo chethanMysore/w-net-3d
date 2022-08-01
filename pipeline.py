@@ -178,7 +178,8 @@ class Pipeline:
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                 local_batch = torch.movedim(local_batch, -1, -3)
-
+                if local_batch.shape[0] != self.batch_size:
+                    continue
                 # Transfer to GPU
                 self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
 
@@ -311,6 +312,8 @@ class Pipeline:
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                 local_batch = torch.movedim(local_batch, -1, -3)
+                if local_batch.shape[0] != self.batch_size:
+                    continue
                 soft_ncut_loss = torch.tensor(0.0001).float().cuda()
                 reconstruction_loss = torch.tensor(0.0001).float().cuda()
                 loss = torch.tensor(0.0001).float().cuda()
