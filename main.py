@@ -207,10 +207,10 @@ if __name__ == '__main__':
             torch.cuda.empty_cache()  # to avoid memory errors
 
         if args.predict:
-            # pipeline.predict(predict_logger=test_logger, image_path=args.predictor_path,
-            #                  label_path=args.predictor_label_path)
-            class_preds = torch.load(args.predictor_path)
-            pipeline.extract_segmentation(class_preds)
+            pipeline.predict(predict_logger=test_logger, image_path=args.predictor_path,
+                             label_path=args.predictor_label_path)
+            # class_preds = torch.load(args.predictor_path)
+            # pipeline.extract_segmentation(class_preds)
 
     except Exception as error:
         print(error)
