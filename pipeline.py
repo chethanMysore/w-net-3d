@@ -435,9 +435,9 @@ class Pipeline:
                     res_map_shape = local_batch.shape
 
                     with autocast(enabled=self.with_apex):
-                        normalised_res_map = self.model(local_batch)
-                        normalised_res_map = torch.movedim(normalised_res_map, -3, -1)
-                        ignore, class_assignments = torch.max(normalised_res_map, 1, keepdim=True)
+                        class_preds, reconstructed_patch = self.model(local_batch)
+                        class_preds = torch.movedim(class_preds, -3, -1)
+                        ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
 
                         for seg in range(self.num_classes):
                             seg = seg+1
