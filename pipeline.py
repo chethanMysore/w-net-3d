@@ -395,7 +395,7 @@ class Pipeline:
                                                    stride_depth=self.stride_depth, stride_width=self.stride_width,
                                                    stride_length=self.stride_length)
 
-        overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
+        overlap = np.subtract(self.patch_size, (28, 28, 2))
 
         df = pd.DataFrame(columns=["Subject", "Dice", "IoU"])
         result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
@@ -423,7 +423,7 @@ class Pipeline:
                     self.patch_size,
                     overlap,
                 )
-                aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="crop")
+                aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
                 patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
                                                            num_workers=self.num_worker)
 
@@ -437,32 +437,16 @@ class Pipeline:
                     with autocast(enabled=self.with_apex):
                         normalised_res_map = self.model(local_batch)
                         normalised_res_map = torch.movedim(normalised_res_map, -3, -1)
-                        normalised_res_map = torch.movedim(normalised_res_map, 1, -1)
-                        normalised_res_map = normalised_res_map.contiguous().view(-1, self.num_classes)
-                        ignore, class_assignments = torch.max(normalised_res_map, 1)
+                        ignore, class_assignments = torch.max(normalised_res_map, 1, keepdim=True)
 
                         for seg in range(self.num_classes):
-                            seg = seg + 1
-                            seg_indices = torch.where(class_assignments == seg - 1)
+                            seg = seg+1
+                            seg_indices = torch.where(class_assignments == seg-1)
                             class_assignments[seg_indices] = int(255 / seg)
-                        # seg3_indices = torch.where(class_assignments == 3)
-                        # class_assignments[seg3_indices] = 0
-                        # class_assignments = class_assignments.detach().cpu().numpy()
-                        # class_assignments_rgb = torch.from_numpy(create_segmentation_mask(class_assignments, colors,
-                        #                                                                   self.num_classes-1)).cuda()
-                        # class_assignments_rgb = np.array([])
-                        # class_assignments_rgb = torch.from_numpy(np.array([label_colours[c % self.num_classes]
-                        #                                                    for c in class_assignments])).cuda()
-                        # class_pred_heat_map = class_assignments_rgb.reshape((res_map_shape[0], res_map_shape[2],
-                        #                                                      res_map_shape[3], res_map_shape[4],
-                        #                                                      3))
-                        class_pred_heat_map = class_assignments.reshape((res_map_shape[0], res_map_shape[2],
-                                                                         res_map_shape[3], res_map_shape[4], 1))
-                        class_pred_heat_map = torch.movedim(class_pred_heat_map, -1, 1)
-                        aggregator.add_batch(class_pred_heat_map, locations)
+                        aggregator.add_batch(class_assignments, locations)
 
                 predicted = aggregator.get_output_tensor().squeeze()
-                result = predicted.numpy().astype(np.uint8)
+                result = predicted.squeeze().numpy().astype(np.uint16)
 
                 if label is not None:
                     datum = {"Subject": subjectname}
@@ -472,7 +456,7 @@ class Pipeline:
                     df = pd.concat([df, datum], ignore_index=True)
 
                 if save_results:
-                    save_nifti(result, os.path.join(result_root, subjectname + "_DFC_seg.nii.gz"))
+                    save_nifti(result, os.path.join(result_root, subjectname + "_DFC_seg_grid.nii.gz"))
 
                     # Create Segmentation Mask from the class prediction
                     # segmentation_overlay = create_segmentation_mask(predicted, self.num_classes)
