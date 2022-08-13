@@ -385,78 +385,75 @@ class Pipeline:
 
     def test(self, test_logger, test_subjects=None, save_results=True):
         test_logger.debug('Testing...')
-
-        if test_subjects is None:
-            test_folder_path = self.DATASET_PATH + '/test/'
-            # test_label_path = self.DATASET_PATH + '/test_label/'
-
-            test_subjects = self.create_tio_sub_ds(vol_path=test_folder_path, get_subjects_only=True,
-                                                   patch_size=self.patch_size, samples_per_epoch=self.samples_per_epoch,
-                                                   stride_depth=self.stride_depth, stride_width=self.stride_width,
-                                                   stride_length=self.stride_length)
-
-        overlap = np.subtract(self.patch_size, (28, 28, 2))
-
-        df = pd.DataFrame(columns=["Subject", "Dice", "IoU"])
         result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
         os.makedirs(result_root, exist_ok=True)
-        colors = {'segment0': np.array([0, 0, 255], dtype=np.uint8),  # blue
-                  'segment1': np.array([255, 0, 0], dtype=np.uint8),  # red
-                  'segment2': np.array([255, 255, 255], dtype=np.uint8),  # white
-                  'segment3': np.array([0, 255, 0], dtype=np.uint8),  # green
-                  'segment4': np.array([255, 255, 0], dtype=np.uint8),  # yellow
-                  'background': np.array([0, 0, 0], dtype=np.uint8)}  # black
         self.model.eval()
 
         with torch.no_grad():
-            for test_subject in test_subjects:
-                if 'label' in test_subject:
-                    label = test_subject['label'][tio.DATA].float().squeeze().numpy()
-                    del test_subject['label']
-                else:
-                    label = None
-                subjectname = test_subject['subjectname']
-                del test_subject['subjectname']
+            test_subject = test_subjects[0]
+            subjectname = test_subject['subjectname']
+            ip_vol = test_subject['img'][tio.DATA].float().cuda()
+            ip_vol = torch.reshape(ip_vol[:, :, :, :144], (1, 1, 240, 240, 144))
+            print("ip_vol shape: {}".format(ip_vol.shape))
+            with autocast(enabled=self.with_apex):
+                class_preds, reconstructed_patch = self.model(ip_vol)
+                print("class_preds shape: {}".format(class_preds.shape))
+                torch.save(class_preds, os.path.join(result_root, subjectname + "_WNET_v2_class_preds.pth"))
+                ignore, class_assignments = torch.max(class_preds, 1)
+                print("class_assignments shape: {}".format(class_assignments.shape))
+                class_assignments = class_assignments.cpu().numpy().astype(np.uint16)
+                save_nifti(class_assignments, os.path.join(result_root, subjectname + "_WNET_v2_seg_vol.nii.gz"))
 
-                grid_sampler = tio.inference.GridSampler(
-                    test_subject,
-                    self.patch_size,
-                    overlap,
-                )
-                aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
-                patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
-                                                           num_workers=self.num_worker)
-
-                for index, patches_batch in enumerate(tqdm(patch_loader)):
-                    local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                    locations = patches_batch[tio.LOCATION]
-
-                    local_batch = torch.movedim(local_batch, -1, -3)
-                    res_map_shape = local_batch.shape
-
-                    with autocast(enabled=self.with_apex):
-                        class_preds, reconstructed_patch = self.model(local_batch)
-                        class_preds = torch.movedim(class_preds, -3, -1)
-                        ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
-
-                        for seg in range(self.num_classes):
-                            seg = seg+1
-                            seg_indices = torch.where(class_assignments == seg-1)
-                            class_assignments[seg_indices] = int(255 / seg)
-                        aggregator.add_batch(class_assignments, locations)
-
-                predicted = aggregator.get_output_tensor().squeeze()
-                result = predicted.squeeze().numpy().astype(np.uint16)
-
-                if label is not None:
-                    datum = {"Subject": subjectname}
-                    dice3d = dice(result, label)
-                    iou3d = iou(result, label)
-                    datum = pd.DataFrame.from_dict({**datum, "Dice": [dice3d], "IoU": [iou3d]})
-                    df = pd.concat([df, datum], ignore_index=True)
-
-                if save_results:
-                    save_nifti(result, os.path.join(result_root, subjectname + "_DFC_seg_grid.nii.gz"))
+        # overlap = np.subtract(self.patch_size, (28, 28, 2))
+        # with torch.no_grad():
+        #     for test_subject in test_subjects:
+        #         if 'label' in test_subject:
+        #             label = test_subject['label'][tio.DATA].float().squeeze().numpy()
+        #             del test_subject['label']
+        #         else:
+        #             label = None
+        #         subjectname = test_subject['subjectname']
+        #         del test_subject['subjectname']
+        #
+        #         grid_sampler = tio.inference.GridSampler(
+        #             test_subject,
+        #             self.patch_size,
+        #             overlap,
+        #         )
+        #         aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+        #         patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
+        #                                                    num_workers=self.num_worker)
+        #
+        #         for index, patches_batch in enumerate(tqdm(patch_loader)):
+        #             local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
+        #             locations = patches_batch[tio.LOCATION]
+        #
+        #             local_batch = torch.movedim(local_batch, -1, -3)
+        #             res_map_shape = local_batch.shape
+        #
+        #             with autocast(enabled=self.with_apex):
+        #                 class_preds, reconstructed_patch = self.model(local_batch)
+        #                 class_preds = torch.movedim(class_preds, -3, -1)
+        #                 ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
+        #
+        #                 for seg in range(self.num_classes):
+        #                     seg = seg+1
+        #                     seg_indices = torch.where(class_assignments == seg-1)
+        #                     class_assignments[seg_indices] = int(255 / seg)
+        #                 aggregator.add_batch(class_assignments, locations)
+        #
+        #         predicted = aggregator.get_output_tensor().squeeze()
+        #         result = predicted.squeeze().numpy().astype(np.uint16)
+        #
+        #         if label is not None:
+        #             datum = {"Subject": subjectname}
+        #             dice3d = dice(result, label)
+        #             iou3d = iou(result, label)
+        #             datum = pd.DataFrame.from_dict({**datum, "Dice": [dice3d], "IoU": [iou3d]})
+        #             df = pd.concat([df, datum], ignore_index=True)
+        #
+        #         if save_results:
+        #             save_nifti(result, os.path.join(result_root, subjectname + "_DFC_seg_grid.nii.gz"))
 
                     # Create Segmentation Mask from the class prediction
                     # segmentation_overlay = create_segmentation_mask(predicted, self.num_classes)
