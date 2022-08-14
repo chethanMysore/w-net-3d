@@ -26,7 +26,7 @@ __status__ = "Development"
 
 class Pipeline:
 
-    def __init__(self, cmd_args, model, logger, dir_path, checkpoint_path, writer_training, writer_validating):
+    def __init__(self, cmd_args, model, logger, dir_path, checkpoint_path, writer_training, writer_validating, wandb=None):
 
         self.model = model
         self.logger = logger
@@ -35,6 +35,7 @@ class Pipeline:
         self.num_epochs = cmd_args.num_epochs
         self.writer_training = writer_training
         self.writer_validating = writer_validating
+        self.wandb = wandb
         self.CHECKPOINT_PATH = checkpoint_path
         self.DATASET_PATH = dir_path
         self.OUTPUT_PATH = cmd_args.output_path
@@ -269,6 +270,9 @@ class Pipeline:
                                 soft_ncut_loss=total_soft_ncut_loss,
                                 reconstruction_loss=total_reconstr_loss,
                                 total_loss=total_loss)
+            if self.wandb is not None:
+                self.wandb.log({"SoftNcutLoss_train": total_soft_ncut_loss, "ReconstructionLoss_train": total_reconstr_loss,
+                                "total_loss_train": total_loss})
 
             if self.with_apex:
                 save_model(self.CHECKPOINT_PATH, {
@@ -359,6 +363,9 @@ class Pipeline:
         write_epoch_summary(writer, epoch, soft_ncut_loss=total_soft_ncut_loss,
                             reconstruction_loss=total_reconstr_loss,
                             total_loss=total_loss)
+        if self.wandb is not None:
+            self.wandb.log({"SoftNcutLoss_val": total_soft_ncut_loss, "ReconstructionLoss_val": total_reconstr_loss,
+                            "total_loss_val": total_loss})
 
         if self.LOWEST_LOSS > total_loss:  # Save best metric evaluation weights
             self.LOWEST_LOSS = total_loss

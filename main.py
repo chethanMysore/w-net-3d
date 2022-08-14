@@ -16,6 +16,7 @@ from evaluation.metrics import SoftNCutsLoss, ReconstructionLoss
 from models.w_net_3d import WNet3D
 from pipeline import Pipeline
 from utils.logger import Logger
+import wandb
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -31,6 +32,8 @@ torch.backends.cudnn.benchmark = False
 torch.manual_seed(2022)
 np.random.seed(2022)
 random.seed(2022)
+
+wandb.init(project="w-net-3d", entity="chethanmysuru")
 
 if __name__ == '__main__':
 
@@ -168,15 +171,32 @@ if __name__ == '__main__':
     logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
 
+    wandb.config = {
+        "learning_rate": args.learning_rate,
+        "epochs": args.num_epochs,
+        "batch_size": args.batch_size,
+        "patch_size": args.patch_size,
+        "num_classes": args.num_classes,
+        "samples_per_epoch": args.samples_per_epoch,
+        "s_ncut_loss_coeff": args.s_ncut_loss_coeff,
+        "reconstr_loss_coeff": args.reconstr_loss_coeff,
+        "radius": args.radius,
+        "SigmaI": args.SigmaI,
+        "sigmaX": args.sigmaX
+    }
+
     # if args.create_brain_mask:
     #     vols = glob(os.path.join(DATASET_FOLDER, "validate/") + "*.nii") + \
     #            glob(os.path.join(DATASET_FOLDER, "validate/") + "*.nii.gz")
     #     for vol in vols:
     #         filename = os.path.basename(vol).split('.')[0]
+    #         if "_mask" in vol:
+    #             continue
     #         print("Creating mask for {}".format(filename))
-    #         vol_data = nib.load(vol).get_data()
+    #         vol = nib.load(vol)
+    #         affine, vol_data = vol.affine, vol.get_fdata()
     #         binary_mask = np.where(vol_data > 0, 255, 0).astype(np.uint16)
-    #         binary_mask = nib.Nifti1Image(binary_mask, np.eye(4))
+    #         binary_mask = nib.Nifti1Image(binary_mask, affine=affine)
     #         nib.save(binary_mask, os.path.join(DATASET_FOLDER, "validate/") + filename + "_mask.nii.gz")
     #
     #     exit()
@@ -192,7 +212,7 @@ if __name__ == '__main__':
 
     pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
                         dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
-                        writer_training=writer_training, writer_validating=writer_validating)
+                        writer_training=writer_training, writer_validating=writer_validating, wandb=wandb)
 
     # loading existing checkpoint if supplied
     if bool(LOAD_PATH):
