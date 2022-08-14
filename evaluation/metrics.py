@@ -136,18 +136,23 @@ class SoftNCutsLoss_v1(nn.Module):
 
 
 class SoftNCutsLoss(nn.Module):
-    def __init__(self, radius=4, sigmaI=10, sigmaX=4, num_classes=6, ip_shape=(15, 1, 32, 32, 32)):
+    def __init__(self, radius=4, sigmaI=10, sigmaX=4, num_classes=8, batch_size=15, patch_size=32):
         super(SoftNCutsLoss, self).__init__()
         self.radius = radius
         self.sigmaI = sigmaI
         self.sigmaX = sigmaX
         self.num_classes = num_classes
-        self.ip_shape = ip_shape
+        self.patch_size = patch_size
+        self.ip_shape = (batch_size, 1, patch_size, patch_size, patch_size)
         self.pad = torch.nn.ConstantPad3d(radius - 1, np.finfo(np.float).eps)
         self.dissim_matrix = torch.zeros(
-            (ip_shape[0], ip_shape[1], ip_shape[2], ip_shape[3], ip_shape[4], (radius - 1) * 2 + 1,
-             (radius - 1) * 2 + 1, (radius - 1) * 2 + 1))
-        self.dist = torch.zeros((2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1))
+            (self.ip_shape[0], self.ip_shape[1], self.ip_shape[2], self.ip_shape[3], self.ip_shape[4],
+             (radius - 1) * 2 + 1,
+             (radius - 1) * 2 + 1, (radius - 1) * 2 + 1)).cuda()
+        self.dist = torch.zeros((2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1)).cuda()
+        self.cropped_seg = torch.zeros((batch_size, num_classes, patch_size, patch_size, patch_size,
+                                        2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1,
+                                        2 * (self.radius - 1) + 1)).cuda()
 
     def _cal_weights(self, batch, padded_batch):
         """
@@ -157,17 +162,18 @@ class SoftNCutsLoss(nn.Module):
         Output :
         weight and sum weight
         """
-        # According to the weight formula, when Euclidean distance < r,the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
+        # According to the weight formula, when Euclidean distance < r,the weight is 0,
+        # so reduce the dissim matrix size to radius-1 to save time and space.
         # print("calculating weights.")
-        temp_dissim = self.dissim_matrix.clone()
+        temp_dissim = self.dissim_matrix[:batch.shape[0], :, :, :, :, :, :, :]
         for x in range(2 * (self.radius - 1) + 1):
             for y in range(2 * (self.radius - 1) + 1):
                 for z in range(2 * (self.radius - 1) + 1):
-                    temp_dissim[:, :, :, :, :, x, y, z] = batch - padded_batch[:, :, x:self.ip_shape[2] + x,
-                                                                  y:self.ip_shape[3] + y, z:self.ip_shape[4] + z]
+                    temp_dissim[:, :, :, :, :, x, y, z] = batch - padded_batch[:, :, x:self.patch_size + x,
+                                                                  y:self.patch_size + y, z:self.patch_size + z]
 
         temp_dissim = torch.exp(-1 * torch.square(temp_dissim) / self.sigmaI ** 2)
-        temp_dist = self.dist.clone()
+        temp_dist = self.dist
         for x in range(1 - self.radius, self.radius):
             for y in range(1 - self.radius, self.radius):
                 for z in range(1 - self.radius, self.radius):
@@ -188,35 +194,42 @@ class SoftNCutsLoss(nn.Module):
         Output :
         soft_n_cut_loss tensor for a batch of ip patch and K-class predictions
         """
-        padded_preds = self.pad(preds).cpu()
-        preds = preds.cpu()
-        # According to the weight formula, when Euclidean distance < r,the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
+        padded_preds = self.pad(preds)
+        # According to the weight formula, when Euclidean distance < r,
+        # the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
         padded_batch = self.pad(batch)
-        weight, sum_weight = self._cal_weights(batch=batch.cpu(), padded_batch=padded_batch.cpu())
+        weight, sum_weight = self._cal_weights(batch=batch, padded_batch=padded_batch)
 
         # too many values to unpack
-        cropped_seg = []
-        for x in torch.arange((self.radius - 1) * 2 + 1, dtype=torch.long):
-            width = []
-            for y in torch.arange((self.radius - 1) * 2 + 1, dtype=torch.long):
-                depth = []
-                for z in torch.arange((self.radius - 1) * 2 + 1, dtype=torch.long):
-                    depth.append(
-                        padded_preds[:, :, x:x + preds.size()[2], y:y + preds.size()[3], z:z + preds.size()[4]].clone())
-                width.append(torch.stack(depth, 5))
-            cropped_seg.append(torch.stack(width, 5))
-        cropped_seg = torch.stack(cropped_seg, 5)
+        temp_cropped_seg = self.cropped_seg[:preds.shape[0], :, :, :, :, :, :, :]
+        for x in range((self.radius - 1) * 2 + 1):
+            for y in range((self.radius - 1) * 2 + 1):
+                for z in range((self.radius - 1) * 2 + 1):
+                    temp_cropped_seg[:, :, :, :, :, x, y, z] = padded_preds[:, :, x:x + preds.size()[2], y:y + preds.size()[3],
+                                       z:z + preds.size()[4]]
+        # cropped_seg = []
+        # for x in torch.arange((self.radius - 1) * 2 + 1, dtype=torch.long):
+        #     width = []
+        #     for y in torch.arange((self.radius - 1) * 2 + 1, dtype=torch.long):
+        #         depth = []
+        #         for z in torch.arange((self.radius - 1) * 2 + 1, dtype=torch.long):
+        #             depth.append(
+        #                 padded_preds[:, :, x:x + preds.size()[2], y:y + preds.size()[3], z:z + preds.size()[4]])
+        #         width.append(torch.stack(depth, 5))
+        #     cropped_seg.append(torch.stack(width, 5))
+        # cropped_seg = torch.stack(cropped_seg, 5)
 
-        multi1 = cropped_seg.mul(weight)
-        multi2 = multi1.sum(-1).sum(-1).sum(-1).mul(preds)
-        multi3 = sum_weight.mul(preds)
+        numerator = temp_cropped_seg.mul(weight)
+        del temp_cropped_seg
+        numerator = numerator.sum(-1).sum(-1).sum(-1).mul(preds)
+        denominator = sum_weight.mul(preds)
 
-        assocA = multi2.view(multi2.shape[0], multi2.shape[1], -1).sum(-1)
-        assocV = multi3.view(multi3.shape[0], multi3.shape[1], -1).sum(-1)
+        assocA = numerator.view(numerator.shape[0], numerator.shape[1], -1).sum(-1)
+        assocV = denominator.view(denominator.shape[0], denominator.shape[1], -1).sum(-1)
         assoc = assocA.div(assocV).sum(-1)
 
         soft_n_cut_loss = torch.add(-assoc, self.num_classes)
-        return soft_n_cut_loss.float().cuda()
+        return soft_n_cut_loss
 
 
 class ReconstructionLoss(nn.Module):

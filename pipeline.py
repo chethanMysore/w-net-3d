@@ -62,10 +62,9 @@ class Pipeline:
         self.radius = cmd_args.radius
         self.sigmaI = cmd_args.sigmaI
         self.sigmaX = cmd_args.sigmaX
-        self.soft_ncut_loss = SoftNCutsLoss(radius=4, sigmaI=10, sigmaX=4, num_classes=6, ip_shape=(self.batch_size, 1,
-                                                                                                    self.patch_size,
-                                                                                                    self.patch_size,
-                                                                                                    self.patch_size))
+        self.soft_ncut_loss = SoftNCutsLoss(radius=4, sigmaI=10, sigmaX=4, num_classes=self.num_classes,
+                                            batch_size=self.batch_size,
+                                            patch_size=self.patch_size).cuda()
         self.ssim = structural_similarity_index_measure
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
@@ -128,7 +127,7 @@ class Pipeline:
                 max_length=(samples_per_epoch // len(subjects)) * 4,
                 samples_per_volume=(samples_per_epoch // len(subjects)),
                 sampler=sampler,
-                num_workers=0,
+                num_workers=4,
                 start_background=True
             )
             return patches_queue
@@ -178,8 +177,6 @@ class Pipeline:
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                 local_batch = torch.movedim(local_batch, -1, -3)
-                if local_batch.shape[0] != self.batch_size:
-                    continue
                 # Transfer to GPU
                 self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
 
@@ -190,14 +187,11 @@ class Pipeline:
                 with autocast(enabled=self.with_apex):
                     # Get the classification response map(normalized) and respective class assignments after argmax
                     class_preds, reconstructed_patch = self.model(local_batch)
-                    soft_ncut_loss = torch.tensor(0.0001).float().cuda()
-                    reconstruction_loss = torch.tensor(0.0001).float().cuda()
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                    if not torch.any(torch.isnan(soft_ncut_loss)):
-                        soft_ncut_loss = torch.mean(soft_ncut_loss)
-                    else:
-                        soft_ncut_loss = torch.tensor(0.0001).float().cuda()
-                    reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
+                    if torch.any(torch.isnan(soft_ncut_loss)):
+                        continue
+                    soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
+                    reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch, data_range=1.0)
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
 
@@ -269,7 +263,7 @@ class Pipeline:
                 save_model(self.CHECKPOINT_PATH, {
                     'epoch_type': 'last',
                     'epoch': epoch,
-                    # Let is always overwrite, we need just the last checkpoint and best checkpoint(saved after validate)
+                    # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
                     'state_dict': self.model.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
                     'amp': self.scaler.state_dict()
@@ -278,7 +272,7 @@ class Pipeline:
                 save_model(self.CHECKPOINT_PATH, {
                     'epoch_type': 'last',
                     'epoch': epoch,
-                    # Let is always overwrite, we need just the last checkpoint and best checkpoint(saved after validate)
+                    # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
                     'state_dict': self.model.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
                     'amp': None
@@ -312,24 +306,16 @@ class Pipeline:
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                 local_batch = torch.movedim(local_batch, -1, -3)
-                if local_batch.shape[0] != self.batch_size:
-                    continue
-                soft_ncut_loss = torch.tensor(0.0001).float().cuda()
-                reconstruction_loss = torch.tensor(0.0001).float().cuda()
-                loss = torch.tensor(0.0001).float().cuda()
 
                 try:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
                         class_preds, reconstructed_patch = self.model(local_batch)
-                        soft_ncut_loss = torch.tensor(0.0001).float().cuda()
-                        reconstruction_loss = torch.tensor(0.0001).float().cuda()
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                        if not torch.any(torch.isnan(soft_ncut_loss)):
-                            soft_ncut_loss = torch.mean(soft_ncut_loss)
-                        else:
-                            soft_ncut_loss = torch.tensor(0.0001).float().cuda()
-                        reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch).float().cuda()
+                        if torch.any(torch.isnan(soft_ncut_loss)):
+                            continue
+                        soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
+                        reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch, data_range=1.0)
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
                         torch.cuda.empty_cache()
@@ -387,6 +373,7 @@ class Pipeline:
         test_logger.debug('Testing...')
         result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
         os.makedirs(result_root, exist_ok=True)
+
         self.model.eval()
 
         with torch.no_grad():
@@ -404,71 +391,6 @@ class Pipeline:
                 class_assignments = class_assignments.cpu().numpy().astype(np.uint16)
                 save_nifti(class_assignments, os.path.join(result_root, subjectname + "_WNET_v2_seg_vol.nii.gz"))
 
-        # overlap = np.subtract(self.patch_size, (28, 28, 2))
-        # with torch.no_grad():
-        #     for test_subject in test_subjects:
-        #         if 'label' in test_subject:
-        #             label = test_subject['label'][tio.DATA].float().squeeze().numpy()
-        #             del test_subject['label']
-        #         else:
-        #             label = None
-        #         subjectname = test_subject['subjectname']
-        #         del test_subject['subjectname']
-        #
-        #         grid_sampler = tio.inference.GridSampler(
-        #             test_subject,
-        #             self.patch_size,
-        #             overlap,
-        #         )
-        #         aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
-        #         patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
-        #                                                    num_workers=self.num_worker)
-        #
-        #         for index, patches_batch in enumerate(tqdm(patch_loader)):
-        #             local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-        #             locations = patches_batch[tio.LOCATION]
-        #
-        #             local_batch = torch.movedim(local_batch, -1, -3)
-        #             res_map_shape = local_batch.shape
-        #
-        #             with autocast(enabled=self.with_apex):
-        #                 class_preds, reconstructed_patch = self.model(local_batch)
-        #                 class_preds = torch.movedim(class_preds, -3, -1)
-        #                 ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
-        #
-        #                 for seg in range(self.num_classes):
-        #                     seg = seg+1
-        #                     seg_indices = torch.where(class_assignments == seg-1)
-        #                     class_assignments[seg_indices] = int(255 / seg)
-        #                 aggregator.add_batch(class_assignments, locations)
-        #
-        #         predicted = aggregator.get_output_tensor().squeeze()
-        #         result = predicted.squeeze().numpy().astype(np.uint16)
-        #
-        #         if label is not None:
-        #             datum = {"Subject": subjectname}
-        #             dice3d = dice(result, label)
-        #             iou3d = iou(result, label)
-        #             datum = pd.DataFrame.from_dict({**datum, "Dice": [dice3d], "IoU": [iou3d]})
-        #             df = pd.concat([df, datum], ignore_index=True)
-        #
-        #         if save_results:
-        #             save_nifti(result, os.path.join(result_root, subjectname + "_DFC_seg_grid.nii.gz"))
-
-                    # Create Segmentation Mask from the class prediction
-                    # segmentation_overlay = create_segmentation_mask(predicted, self.num_classes)
-                    # save_nifti_rgb(segmentation_overlay, os.path.join(result_root, subjectname + "_DFC_seg_color.nii.gz"))
-                    # save_tif_rgb(segmentation_overlay, os.path.join(result_root, subjectname + "_colour.tif"))
-                    # if label is not None:
-                    #     overlay = create_diff_mask_binary(predicted, label)
-                    #     save_tif_rgb(overlay, os.path.join(result_root, subjectname + "_colour.tif"))
-
-                # test_logger.info("Testing " + subjectname + "..." +
-                #                  "\n Dice:" + str(dice3d) +
-                #                  "\n JacardIndex:" + str(iou3d))
-
-        # df.to_excel(os.path.join(result_root, "Results_Main.xlsx"))
-
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
 
@@ -484,7 +406,7 @@ class Pipeline:
 
         self.test(predict_logger, test_subjects=[subject], save_results=True)
 
-    def extract_segmentation(self, class_preds):
+    def extract_segmentation(self):
         print("Analysing predictions...")
         # result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
         # ignore, class_preds_max = torch.max(class_preds, 0)
@@ -496,7 +418,7 @@ class Pipeline:
         radius = 4
         sigmaI = 10
         sigmaX = 4
-        num_classes = 6
+        num_classes = 2
         patch = torch.ones(15, 1, 32, 32, 32)
         shape = patch.shape
         preds = torch.ones(15, num_classes, 32, 32, 32) / num_classes

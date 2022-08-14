@@ -72,7 +72,7 @@ if __name__ == '__main__':
                         action="store_true",
                         help="To use deformation for training")
     parser.add_argument('-apex',
-                        default=False,
+                        default=True,
                         help="To use half precision on model weights.")
     parser.add_argument("-num_conv",
                         type=int,
@@ -105,12 +105,12 @@ if __name__ == '__main__':
                              "depth dimension (To be used during validation and inference)")
     parser.add_argument("-stride_width",
                         type=int,
-                        default=32,
+                        default=28,
                         help="Strides for dividing the input volume into patches in "
                              "width dimension (To be used during validation and inference)")
     parser.add_argument("-stride_length",
                         type=int,
-                        default=32,
+                        default=28,
                         help="Strides for dividing the input volume into patches in "
                              "length dimension (To be used during validation and inference)")
     parser.add_argument("-samples_per_epoch",
@@ -147,7 +147,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-
     MODEL_NAME = args.model_name
     DATASET_FOLDER = args.dataset_path
     OUTPUT_PATH = args.output_path
@@ -162,20 +161,6 @@ if __name__ == '__main__':
 
     logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
-
-    # Soft NCut loss test
-    # soft_ncut_loss = SoftNCutsLoss(32, 32, 32)
-    # patch = torch.ones(32, 32, 32)
-    # prob = torch.ones(32, 32, 32, `2`) / 2
-    # loss = soft_ncut_loss(patch, prob, 2)
-
-    # Reconstruction loss testing
-    # ssim = ReconstructionLoss()
-    # patch = torch.rand((32, 32, 32))
-    # reconstructed_patch = patch * 0.75
-    # patch = torch.reshape(patch, (1, 1, 32, 32, 32))
-    # reconstructed_patch = torch.reshape(reconstructed_patch, (1, 1, 32, 32, 32))
-    # reconstruction_loss = ssim(reconstructed_patch, patch)
 
     # models
     model = WNet3D(output_ch=args.num_classes)
