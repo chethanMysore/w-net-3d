@@ -165,7 +165,7 @@ class SoftNCutsLoss(nn.Module):
         # According to the weight formula, when Euclidean distance < r,the weight is 0,
         # so reduce the dissim matrix size to radius-1 to save time and space.
         # print("calculating weights.")
-        temp_dissim = self.dissim_matrix[:batch.shape[0], :, :, :, :, :, :, :]
+        temp_dissim = self.dissim_matrix[:batch.shape[0], :, :, :, :, :, :, :].clone()
         for x in range(2 * (self.radius - 1) + 1):
             for y in range(2 * (self.radius - 1) + 1):
                 for z in range(2 * (self.radius - 1) + 1):
@@ -173,7 +173,7 @@ class SoftNCutsLoss(nn.Module):
                                                                   y:self.patch_size + y, z:self.patch_size + z]
 
         temp_dissim = torch.exp(-1 * torch.square(temp_dissim) / self.sigmaI ** 2)
-        temp_dist = self.dist
+        temp_dist = self.dist.clone()
         for x in range(1 - self.radius, self.radius):
             for y in range(1 - self.radius, self.radius):
                 for z in range(1 - self.radius, self.radius):
@@ -201,7 +201,7 @@ class SoftNCutsLoss(nn.Module):
         weight, sum_weight = self._cal_weights(batch=batch, padded_batch=padded_batch)
 
         # too many values to unpack
-        temp_cropped_seg = self.cropped_seg[:preds.shape[0], :, :, :, :, :, :, :]
+        temp_cropped_seg = self.cropped_seg[:preds.shape[0], :, :, :, :, :, :, :].clone()
         for x in range((self.radius - 1) * 2 + 1):
             for y in range((self.radius - 1) * 2 + 1):
                 for z in range((self.radius - 1) * 2 + 1):
