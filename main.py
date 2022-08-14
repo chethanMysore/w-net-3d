@@ -163,7 +163,7 @@ if __name__ == '__main__':
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
 
     # models
-    model = WNet3D(output_ch=args.num_classes)
+    model = torch.nn.DataParallel(WNet3D(output_ch=args.num_classes))
     model.cuda()
 
     writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)
