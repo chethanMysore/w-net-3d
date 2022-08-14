@@ -203,6 +203,7 @@ class Pipeline:
                     if torch.any(torch.isnan(soft_ncut_loss)):
                         continue
                     soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
+                    reconstructed_patch = torch.sigmoid(reconstructed_patch)
                     reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch)
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
@@ -330,6 +331,7 @@ class Pipeline:
                         if torch.any(torch.isnan(soft_ncut_loss)):
                             continue
                         soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
+                        reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch)
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
