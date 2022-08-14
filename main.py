@@ -5,7 +5,9 @@
 
 import argparse
 import random
-
+# import nibabel as nib
+# from glob import glob
+# import os
 import numpy as np
 import torch
 import torch.utils.data
@@ -144,6 +146,10 @@ if __name__ == '__main__':
                         type=float,
                         default=4,
                         help="SigmaX")
+    # parser.add_argument("-create_brain_mask",
+    #                     type=bool,
+    #                     default=False,
+    #                     help="Create binary brain mask for input volumes")
 
     args = parser.parse_args()
 
@@ -161,6 +167,21 @@ if __name__ == '__main__':
 
     logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
+
+    # if args.create_brain_mask:
+    #     vols = glob(os.path.join(DATASET_FOLDER, "validate/") + "*.nii") + \
+    #            glob(os.path.join(DATASET_FOLDER, "validate/") + "*.nii.gz")
+    #     for vol in vols:
+    #         filename = os.path.basename(vol).split('.')[0]
+    #         print("Creating mask for {}".format(filename))
+    #         vol_data = nib.load(vol).get_data()
+    #         binary_mask = np.where(vol_data > 0, 255, 0).astype(np.uint16)
+    #         binary_mask = nib.Nifti1Image(binary_mask, np.eye(4))
+    #         nib.save(binary_mask, os.path.join(DATASET_FOLDER, "validate/") + filename + "_mask.nii.gz")
+    #
+    #     exit()
+
+
 
     # models
     model = torch.nn.DataParallel(WNet3D(output_ch=args.num_classes))

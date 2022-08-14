@@ -107,11 +107,20 @@ class Pipeline:
         subjects = []
         for i in range(len(vols)):
             vol = vols[i]
+            if "_mask" in vol:
+                continue
             filename = os.path.basename(vol).split('.')[0]
+            # subject = tio.Subject(
+            #     img=tio.ScalarImage(vol),
+            #     subjectname=filename,
+            # )
+
             subject = tio.Subject(
                 img=tio.ScalarImage(vol),
+                sampling_map=tio.Image(vol.split('.')[0] + '_mask.nii.gz', type=tio.SAMPLING_MAP),
                 subjectname=filename,
             )
+
             # vol_transforms = tio.ToCanonical(), tio.Resample(tio.ScalarImage(vol))
             # transform = tio.Compose(vol_transforms)
             # subject = transform(subject)
@@ -122,7 +131,8 @@ class Pipeline:
 
         if is_train:
             subjects_dataset = tio.SubjectsDataset(subjects)
-            sampler = tio.data.UniformSampler(patch_size)
+            # sampler = tio.data.UniformSampler(patch_size)
+            sampler = tio.data.WeightedSampler(patch_size, 'sampling_map')
             patches_queue = tio.Queue(
                 subjects_dataset,
                 max_length=(samples_per_epoch // len(subjects)) * 4,
