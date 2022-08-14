@@ -181,7 +181,7 @@ if __name__ == '__main__':
         "s_ncut_loss_coeff": args.s_ncut_loss_coeff,
         "reconstr_loss_coeff": args.reconstr_loss_coeff,
         "radius": args.radius,
-        "SigmaI": args.SigmaI,
+        "SigmaI": args.sigmaI,
         "sigmaX": args.sigmaX
     }
 
