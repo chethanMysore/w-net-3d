@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss)
 from torchmetrics.functional import structural_similarity_index_measure
+from pytorch_msssim import ssim
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
 
@@ -65,7 +66,7 @@ class Pipeline:
         self.soft_ncut_loss = SoftNCutsLoss(radius=4, sigmaI=10, sigmaX=4, num_classes=self.num_classes,
                                             batch_size=self.batch_size,
                                             patch_size=self.patch_size).cuda()
-        self.ssim = structural_similarity_index_measure
+        self.ssim = ssim  # structural_similarity_index_measure
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
