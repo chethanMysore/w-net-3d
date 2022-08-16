@@ -68,7 +68,7 @@ class Pipeline:
                                             batch_size=self.batch_size,
                                             patch_size=self.patch_size).cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
-        self.ssim_loss = ReconstructionLoss()
+        self.ssim = structural_similarity_index_measure
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -205,7 +205,7 @@ class Pipeline:
                         continue
                     soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                    reconstruction_loss = self.ssim_loss(reconstructed_patch, local_batch)
+                    reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch)
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
 
@@ -333,7 +333,7 @@ class Pipeline:
                             continue
                         soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.ssim_loss(reconstructed_patch, local_batch)
+                        reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch)
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
                         torch.cuda.empty_cache()
