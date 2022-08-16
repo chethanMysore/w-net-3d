@@ -67,7 +67,8 @@ class Pipeline:
         self.soft_ncut_loss = SoftNCutsLoss(radius=4, sigmaI=10, sigmaX=4, num_classes=self.num_classes,
                                             batch_size=self.batch_size,
                                             patch_size=self.patch_size).cuda()
-        self.ssim = ssim  # structural_similarity_index_measure
+        # self.ssim = ssim  # structural_similarity_index_measure
+        self.ssim_loss = ReconstructionLoss()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -175,8 +176,6 @@ class Pipeline:
 
     def train(self):
         self.logger.debug("Training...")
-        result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
-        os.makedirs(result_root, exist_ok=True)
 
         training_batch_index = 0
         for epoch in range(self.num_epochs):
@@ -206,9 +205,7 @@ class Pipeline:
                         continue
                     soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                    torch.save(reconstructed_patch, os.path.join(result_root, "recr_batch" + str(batch_index) + ".pth"))
-                    torch.save(local_batch, os.path.join(result_root, "local_batch" + str(batch_index) + ".pth"))
-                    reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch, data_range=1.0, size_average=True, nonnegative_ssim=True)
+                    reconstruction_loss = self.ssim_loss(reconstructed_patch, local_batch)
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
 
@@ -336,7 +333,7 @@ class Pipeline:
                             continue
                         soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = 1 - self.ssim(reconstructed_patch, local_batch, data_range=1.0, size_average=True, nonnegative_ssim=True)
+                        reconstruction_loss = self.ssim_loss(reconstructed_patch, local_batch)
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
                         torch.cuda.empty_cache()
