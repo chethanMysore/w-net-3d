@@ -236,7 +236,7 @@ class SoftNCutsLoss(nn.Module):
 class ReconstructionLoss(nn.Module):
     def __init__(self):
         super(ReconstructionLoss, self).__init__()
-        self.ssim_module = SSIM(data_range=1.0, size_average=True, channel=1, nonnegative_ssim=True)
+        self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0)
 
     def forward(self, y_pred, y_true):
-        return 1 - self.ssim_module(y_pred, y_true)
+        return 1 - self.ssim(y_pred, y_true)
