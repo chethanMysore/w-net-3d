@@ -9,7 +9,7 @@ Purpose :
 import torch
 import torch.nn as nn
 import torch.utils.data
-from torchmetrics import StructuralSimilarityIndexMeasure
+from torchmetrics.functional import structural_similarity_index_measure
 import numpy as np
 import torchio as tio
 from pytorch_msssim import SSIM
@@ -236,7 +236,6 @@ class SoftNCutsLoss(nn.Module):
 class ReconstructionLoss(nn.Module):
     def __init__(self):
         super(ReconstructionLoss, self).__init__()
-        self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0)
 
     def forward(self, y_pred, y_true):
-        return 1 - self.ssim(y_pred, y_true)
+        return 1 - structural_similarity_index_measure(y_pred, y_true)
