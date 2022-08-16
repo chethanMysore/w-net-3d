@@ -68,7 +68,7 @@ class Pipeline:
                                             batch_size=self.batch_size,
                                             patch_size=self.patch_size).cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
-        self.ssim_loss = ReconstructionLoss(data_range=1.0, size_average=True, channel=1)
+        self.ssim_loss = ReconstructionLoss()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()

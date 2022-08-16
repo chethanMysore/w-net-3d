@@ -233,9 +233,10 @@ class SoftNCutsLoss(nn.Module):
         return soft_n_cut_loss
 
 
-class ReconstructionLoss(SSIM):
-    def __init__(self, data_range=1.0, size_average=True, channel=1):
-        super(ReconstructionLoss, self).__init__(data_range=data_range, size_average=size_average, channel=channel, nonnegative_ssim=True)
+class ReconstructionLoss(nn.Module):
+    def __init__(self):
+        super(ReconstructionLoss, self).__init__()
+        self.ssim_module = SSIM(data_range=1.0, size_average=True, channel=1, nonnegative_ssim=True)
 
     def forward(self, y_pred, y_true):
-        return 1 - super(ReconstructionLoss, self).forward(y_pred, y_true)
+        return 1 - self.ssim_module(y_pred, y_true)
