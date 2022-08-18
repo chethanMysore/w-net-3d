@@ -412,8 +412,8 @@ class Pipeline:
                 torch.save(reconstructed_patch, os.path.join(result_root, subjectname + "_WNET_v2_recr.pth"))
                 ignore, class_assignments = torch.max(class_preds, 1)
                 print("class_assignments shape: {}".format(class_assignments.shape))
-                class_assignments = class_assignments.cpu().numpy().astype(np.uint16)
-                reconstructed_patch = reconstructed_patch.cpu().numpy().astype(np.uint16)
+                class_assignments = class_assignments.cpu().squeeze().numpy().astype(np.uint16)
+                reconstructed_patch = reconstructed_patch.cpu().squeeze().numpy().astype(np.uint16)
                 save_nifti(class_assignments, os.path.join(result_root, subjectname + "_WNET_v2_seg_vol.nii.gz"))
                 save_nifti(reconstructed_patch, os.path.join(result_root, subjectname + "_WNET_v2_recr.nii.gz"))
 
