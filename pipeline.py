@@ -205,7 +205,7 @@ class Pipeline:
                         continue
                     soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                    reconstruction_loss = 1 - ssim(reconstructed_patch, local_batch, data_range=1.0, nonnegative_ssim=True, win_size=15)
+                    reconstruction_loss = 1 - structural_similarity_index_measure(reconstructed_patch, local_batch, data_range=1.0)
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
 
@@ -227,15 +227,16 @@ class Pipeline:
                                 self.scaler.scale(loss[i]).backward(retain_graph=True)
                         loss = torch.sum(torch.stack(loss))
                     else:
-                        self.scaler.scale(loss).backward()
+                        # self.scaler.scale(loss).backward()
+                        loss.backward()
 
                     if self.clip_grads:
-                        self.scaler.unscale_(self.optimizer)
+                        # self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                         # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
 
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
+                    # self.scaler.step(self.optimizer)
+                    # self.scaler.update()
                 else:
                     loss.backward()
                     if self.clip_grads:
@@ -333,7 +334,7 @@ class Pipeline:
                             continue
                         soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = 1 - ssim(reconstructed_patch, local_batch, data_range=1.0, nonnegative_ssim=True, win_size=15)
+                        reconstruction_loss = 1 - structural_similarity_index_measure(reconstructed_patch, local_batch, data_range=1.0)
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
                         torch.cuda.empty_cache()
