@@ -140,7 +140,7 @@ class Pipeline:
                 max_length=(samples_per_epoch // len(subjects)) * 4,
                 samples_per_volume=(samples_per_epoch // len(subjects)),
                 sampler=sampler,
-                num_workers=4,
+                num_workers=0,
                 start_background=True
             )
             return patches_queue
