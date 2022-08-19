@@ -234,7 +234,7 @@ class Pipeline:
                         # self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                         # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
-
+                    self.optimizer.step()
                     # self.scaler.step(self.optimizer)
                     # self.scaler.update()
                 else:
