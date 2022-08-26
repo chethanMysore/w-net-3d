@@ -64,7 +64,9 @@ if __name__ == '__main__':
                         default="",
                         help="Path to the label image to find the diff between label an output"
                              ", ex:/home/test/ww25_label.nii ")
-
+    parser.add_argument('-recr_loss_model_path',
+                        default="",
+                        help="Path to weights '.pth' file for unet3D model used to compute reconstruction loss")
     parser.add_argument('-load_path',
                         default="",
                         help="Path to checkpoint of existing model to load, ex:/home/model/checkpoint")

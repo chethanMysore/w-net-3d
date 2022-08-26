@@ -9,10 +9,11 @@ Purpose :
 import torch
 import torch.nn as nn
 import torch.utils.data
-from torchmetrics.functional import structural_similarity_index_measure
+# from torchmetrics.functional import structural_similarity_index_measure
 import numpy as np
 import torchio as tio
-from pytorch_msssim import SSIM
+# from pytorch_msssim import SSIM
+from .perceptual_loss import PerceptualLoss
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -234,8 +235,9 @@ class SoftNCutsLoss(nn.Module):
 
 
 class ReconstructionLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, recr_loss_model_path=None):
         super(ReconstructionLoss, self).__init__()
+        self.loss = PerceptualLoss(loss_model="unet3Dds", model_load_path=recr_loss_model_path)
 
     def forward(self, y_pred, y_true):
-        return 1 - structural_similarity_index_measure(y_pred, y_true)
+        return self.loss(y_pred, y_true)

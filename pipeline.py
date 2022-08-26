@@ -10,8 +10,8 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
 from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss)
-from torchmetrics.functional import structural_similarity_index_measure
-from pytorch_msssim import ssim
+# from torchmetrics.functional import structural_similarity_index_measure
+# from pytorch_msssim import ssim
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
 
@@ -68,7 +68,8 @@ class Pipeline:
                                             batch_size=self.batch_size,
                                             patch_size=self.patch_size).cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
-        self.ssim = structural_similarity_index_measure
+        # self.ssim = structural_similarity_index_measure
+        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path)
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -205,7 +206,7 @@ class Pipeline:
                         continue
                     soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                    reconstruction_loss = 1 - structural_similarity_index_measure(reconstructed_patch, local_batch, data_range=1.0)
+                    reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
                     loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                     torch.cuda.empty_cache()
 
@@ -334,7 +335,7 @@ class Pipeline:
                             continue
                         soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = 1 - structural_similarity_index_measure(reconstructed_patch, local_batch, data_range=1.0)
+                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
                         loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
                         torch.cuda.empty_cache()
