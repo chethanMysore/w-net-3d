@@ -91,7 +91,7 @@ class Pipeline:
                                                       stride_length=self.stride_length, stride_width=self.stride_width,
                                                       stride_depth=self.stride_depth)
             self.train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size, shuffle=True,
-                                                            num_workers=self.num_worker)
+                                                            num_workers=0)
             validation_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
                                                         patch_size=self.patch_size,
                                                         samples_per_epoch=self.samples_per_epoch,
@@ -141,7 +141,7 @@ class Pipeline:
                 max_length=(samples_per_epoch // len(subjects)) * 4,
                 samples_per_volume=(samples_per_epoch // len(subjects)),
                 sampler=sampler,
-                num_workers=0,
+                num_workers=8,
                 start_background=True
             )
             return patches_queue
