@@ -100,9 +100,9 @@ class Pipeline:
                                                         stride_depth=self.stride_depth,
                                                         is_train=False)
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
-                                                     num_samples=(self.samples_per_epoch // num_subjects) * 4)
+                                                     num_samples=(self.samples_per_epoch // num_subjects) * 40)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=self.num_worker, sampler=sampler)
+                                                               shuffle=False, num_workers=0, sampler=sampler)
 
     @staticmethod
     def create_tio_sub_ds(vol_path, patch_size, samples_per_epoch, stride_length, stride_width, stride_depth,
