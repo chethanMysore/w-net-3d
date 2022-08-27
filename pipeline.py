@@ -92,15 +92,17 @@ class Pipeline:
                                                       stride_depth=self.stride_depth)
             self.train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size, shuffle=True,
                                                             num_workers=0)
-            validation_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
+            validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
                                                         patch_size=self.patch_size,
                                                         samples_per_epoch=self.samples_per_epoch,
                                                         stride_length=self.stride_length,
                                                         stride_width=self.stride_width,
                                                         stride_depth=self.stride_depth,
                                                         is_train=False)
+            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
+                                                     num_samples=(self.samples_per_epoch // num_subjects) * 4)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=self.num_worker)
+                                                               shuffle=False, num_workers=self.num_worker, sampler=sampler)
 
     @staticmethod
     def create_tio_sub_ds(vol_path, patch_size, samples_per_epoch, stride_length, stride_width, stride_depth,
@@ -155,7 +157,7 @@ class Pipeline:
                     overlap,
                 )
                 grid_samplers.append(grid_sampler)
-            return torch.utils.data.ConcatDataset(grid_samplers)
+            return torch.utils.data.ConcatDataset(grid_samplers), len(grid_samplers)
 
     @staticmethod
     def normaliser(batch):
