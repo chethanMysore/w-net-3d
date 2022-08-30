@@ -222,33 +222,63 @@ class Pipeline:
                                  "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
                                  str(reconstruction_loss) + " total_loss: " + str(loss))
 
-                # Calculating gradients
+                # Update only encoder by backpropagating soft-n-cut loss
                 if self.with_apex:
-                    if type(loss) is list:
-                        for i in range(len(loss)):
-                            if i + 1 == len(loss):  # final loss
-                                self.scaler.scale(loss[i]).backward()
-                            else:
-                                self.scaler.scale(loss[i]).backward(retain_graph=True)
-                        loss = torch.sum(torch.stack(loss))
-                    else:
-                        # self.scaler.scale(loss).backward()
-                        loss.backward()
-
+                    # soft_ncut_loss.backward()
+                    self.scaler.scale(soft_ncut_loss).backward()
                     if self.clip_grads:
-                        # self.scaler.unscale_(self.optimizer)
+                        self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                        # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
-                    self.optimizer.step()
-                    # self.scaler.step(self.optimizer)
-                    # self.scaler.update()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
                 else:
-                    loss.backward()
+                    soft_ncut_loss.backward()
                     if self.clip_grads:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                        # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
-
                     self.optimizer.step()
+
+                # Update the WNet by backpropagating reconstruction_loss
+                if self.with_apex:
+                    # reconstruction_loss.backward()
+                    self.scaler.scale(reconstruction_loss).backward()
+                    if self.clip_grads:
+                        self.scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    reconstruction_loss.backward()
+                    if self.clip_grads:
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                    self.optimizer.step()
+
+                # # Calculating gradients
+                # if self.with_apex:
+                #     if type(loss) is list:
+                #         for i in range(len(loss)):
+                #             if i + 1 == len(loss):  # final loss
+                #                 self.scaler.scale(loss[i]).backward()
+                #             else:
+                #                 self.scaler.scale(loss[i]).backward(retain_graph=True)
+                #         loss = torch.sum(torch.stack(loss))
+                #     else:
+                #         # self.scaler.scale(loss).backward()
+                #         loss.backward()
+                #
+                #     if self.clip_grads:
+                #         # self.scaler.unscale_(self.optimizer)
+                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                #         # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
+                #     self.optimizer.step()
+                #     # self.scaler.step(self.optimizer)
+                #     # self.scaler.update()
+                # else:
+                #     loss.backward()
+                #     if self.clip_grads:
+                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                #         # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
+                #
+                #     self.optimizer.step()
 
                 # if training_batch_index % 50 == 0:  # Save best metric evaluation weights
                 #     write_summary(writer=self.writer_training, index=training_batch_index,
