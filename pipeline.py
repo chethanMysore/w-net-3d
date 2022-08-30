@@ -188,6 +188,7 @@ class Pipeline:
             total_reconstr_loss = 0
             total_loss = 0
             batch_index = 0
+            num_batches = 0
 
             for batch_index, patches_batch in enumerate(tqdm(self.train_loader)):
 
@@ -205,6 +206,7 @@ class Pipeline:
                     class_preds, reconstructed_patch = self.model(local_batch)
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                     if torch.any(torch.isnan(soft_ncut_loss)):
+                        self.logger.info("Found nan in soft_ncut_loss")
                         continue
                     soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
@@ -260,13 +262,15 @@ class Pipeline:
                 total_reconstr_loss += reconstruction_loss.detach().item()
                 total_loss += loss.detach().item()
 
+                num_batches += 1
+
                 # To avoid memory errors
                 torch.cuda.empty_cache()
 
             # Calculate the average loss per batch in one epoch
-            total_soft_ncut_loss /= (batch_index + 1.0)
-            total_reconstr_loss /= (batch_index + 1.0)
-            total_loss /= (batch_index + 1.0)
+            total_soft_ncut_loss /= (num_batches + 1.0)
+            total_reconstr_loss /= (num_batches + 1.0)
+            total_loss /= (num_batches + 1.0)
 
             # Print every epoch
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
@@ -323,7 +327,6 @@ class Pipeline:
         with torch.no_grad():
             for index, patches_batch in enumerate(tqdm(data_loader)):
                 self.logger.info("loading" + str(index))
-                no_patches += 1
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                 local_batch = torch.movedim(local_batch, -1, -3)
@@ -334,6 +337,7 @@ class Pipeline:
                         class_preds, reconstructed_patch = self.model(local_batch)
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         if torch.any(torch.isnan(soft_ncut_loss)):
+                            self.logger.info("Found nan in soft_ncut_loss")
                             continue
                         soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
@@ -353,11 +357,12 @@ class Pipeline:
                 self.logger.info("Batch_Index:" + str(index) + " Validation..." +
                                  "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
                                  str(reconstruction_loss) + " total_loss: " + str(loss))
+                no_patches += 1
 
         # Average the losses
-        total_soft_ncut_loss = total_soft_ncut_loss / no_patches
-        total_reconstr_loss = total_reconstr_loss / no_patches
-        total_loss = total_loss / no_patches
+        total_soft_ncut_loss = total_soft_ncut_loss / (no_patches + 1)
+        total_reconstr_loss = total_reconstr_loss / (no_patches + 1)
+        total_loss = total_loss / (no_patches + 1)
 
         process = ' Validating'
         self.logger.info("Epoch:" + str(training_index) + process + "..." +
