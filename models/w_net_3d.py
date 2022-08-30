@@ -219,7 +219,7 @@ class WNet3D(nn.Module):
         self.Encoder = AttUnet(img_ch=img_ch, output_ch=output_ch)
         self.Decoder = AttUnet(img_ch=output_ch, output_ch=1)
 
-        self.activation = torch.nn.Softmax()
+        self.activation = torch.nn.Softmax(dim=1)
 
     def forward(self, x):
         encoder_op = self.Encoder(x)
