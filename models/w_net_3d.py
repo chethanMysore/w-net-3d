@@ -217,13 +217,13 @@ class WNet3D(nn.Module):
         super(WNet3D, self).__init__()
 
         self.Encoder = AttUnet(img_ch=img_ch, output_ch=output_ch)
-        self.Decoder = AttUnet(img_ch=img_ch, output_ch=1)
+        self.Decoder = AttUnet(img_ch=output_ch, output_ch=1)
 
         self.activation = torch.nn.Softmax()
 
     def forward(self, x):
         encoder_op = self.Encoder(x)
         class_prob = self.activation(encoder_op)
-        reconstructed_op = self.Decoder(x)
+        reconstructed_op = self.Decoder(class_prob)
 
         return class_prob.float(), reconstructed_op.float()
