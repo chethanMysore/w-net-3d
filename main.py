@@ -16,7 +16,6 @@ from evaluation.metrics import SoftNCutsLoss, ReconstructionLoss
 from models.w_net_3d import WNet3D
 from pipeline import Pipeline
 from utils.logger import Logger
-import wandb
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -32,8 +31,6 @@ torch.backends.cudnn.benchmark = False
 torch.manual_seed(2022)
 np.random.seed(2022)
 random.seed(2022)
-
-wandb.init(project="w-net-3d", entity="chethanmysuru")
 
 if __name__ == '__main__':
 
@@ -130,11 +127,11 @@ if __name__ == '__main__':
                         help="Number of worker threads")
     parser.add_argument("-s_ncut_loss_coeff",
                         type=float,
-                        default=0.7,
+                        default=1.0,
                         help="loss coefficient for soft ncut loss")
     parser.add_argument("-reconstr_loss_coeff",
                         type=float,
-                        default=0.3,
+                        default=1.0,
                         help="loss coefficient for reconstruction loss")
     parser.add_argument("-predictor_subject_name",
                         default="test_subject",
@@ -151,6 +148,9 @@ if __name__ == '__main__':
                         type=float,
                         default=4,
                         help="SigmaX")
+    parser.add_argument("-wandb",
+                        default=True,
+                        help="Set this to true to include wandb logging")
     # parser.add_argument("-create_brain_mask",
     #                     type=bool,
     #                     default=False,
@@ -172,20 +172,23 @@ if __name__ == '__main__':
 
     logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
-
-    wandb.config = {
-        "learning_rate": args.learning_rate,
-        "epochs": args.num_epochs,
-        "batch_size": args.batch_size,
-        "patch_size": args.patch_size,
-        "num_classes": args.num_classes,
-        "samples_per_epoch": args.samples_per_epoch,
-        "s_ncut_loss_coeff": args.s_ncut_loss_coeff,
-        "reconstr_loss_coeff": args.reconstr_loss_coeff,
-        "radius": args.radius,
-        "SigmaI": args.sigmaI,
-        "sigmaX": args.sigmaX
-    }
+    wandb=None
+    if args.wandb.lower() == "true":
+        import wandb
+        wandb.init(project="w-net-3d", entity="chethanmysuru", notes=args.model_name)
+        wandb.config = {
+            "learning_rate": args.learning_rate,
+            "epochs": args.num_epochs,
+            "batch_size": args.batch_size,
+            "patch_size": args.patch_size,
+            "num_classes": args.num_classes,
+            "samples_per_epoch": args.samples_per_epoch,
+            "s_ncut_loss_coeff": args.s_ncut_loss_coeff,
+            "reconstr_loss_coeff": args.reconstr_loss_coeff,
+            "radius": args.radius,
+            "SigmaI": args.sigmaI,
+            "sigmaX": args.sigmaX
+        }
 
     # if args.create_brain_mask:
     #     vols = glob(os.path.join(DATASET_FOLDER, "validate/") + "*.nii") + \
@@ -235,6 +238,8 @@ if __name__ == '__main__':
             torch.cuda.empty_cache()  # to avoid memory errors
 
         if args.predict:
+            if args.load_best:
+                pipeline.load(load_best=True)
             pipeline.predict(predict_logger=test_logger, image_path=args.predictor_path,
                              label_path=args.predictor_label_path)
             # class_preds = torch.load(args.predictor_path)
