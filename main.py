@@ -173,7 +173,7 @@ if __name__ == '__main__':
     logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
     wandb=None
-    if args.wandb.lower() == "true":
+    if str(args.wandb).lower() == "true":
         import wandb
         wandb.init(project="w-net-3d", entity="chethanmysuru", notes=args.model_name)
         wandb.config = {
