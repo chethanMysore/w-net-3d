@@ -26,7 +26,8 @@ __status__ = "Development"
 
 class Pipeline:
 
-    def __init__(self, cmd_args, model, logger, dir_path, checkpoint_path, writer_training, writer_validating, wandb=None):
+    def __init__(self, cmd_args, model, logger, dir_path, checkpoint_path, writer_training, writer_validating,
+                 wandb=None):
 
         self.model = model
         self.logger = logger
@@ -44,6 +45,7 @@ class Pipeline:
         self.clip_grads = cmd_args.clip_grads
         self.with_apex = cmd_args.apex
         self.num_classes = cmd_args.num_classes
+        self.train_encoder_only = cmd_args.train_encoder_only
 
         # image input parameters
         self.patch_size = cmd_args.patch_size
@@ -93,12 +95,12 @@ class Pipeline:
             self.train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size, shuffle=True,
                                                             num_workers=0)
             validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
-                                                        patch_size=self.patch_size,
-                                                        samples_per_epoch=self.samples_per_epoch,
-                                                        stride_length=self.stride_length,
-                                                        stride_width=self.stride_width,
-                                                        stride_depth=self.stride_depth,
-                                                        is_train=False)
+                                                                      patch_size=self.patch_size,
+                                                                      samples_per_epoch=self.samples_per_epoch,
+                                                                      stride_length=self.stride_length,
+                                                                      stride_width=self.stride_width,
+                                                                      stride_depth=self.stride_depth,
+                                                                      is_train=False)
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
                                                      num_samples=(self.samples_per_epoch // num_subjects) * 40)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
@@ -225,27 +227,29 @@ class Pipeline:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                     self.optimizer.step()
 
-                self.optimizer.zero_grad()
+                reconstruction_loss = 0
+                if not str(self.train_encoder_only).lower() == "true":
+                    self.optimizer.zero_grad()
 
-                with autocast(enabled=self.with_apex):
-                    reconstructed_patch = self.model(local_batch, ops="dec")
-                    reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                    reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
+                    with autocast(enabled=self.with_apex):
+                        reconstructed_patch = self.model(local_batch, ops="dec")
+                        reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
 
-                # Update the WNet by backpropagating reconstruction_loss
-                if self.with_apex:
-                    # reconstruction_loss.backward()
-                    self.scaler.scale(reconstruction_loss).backward()
-                    if self.clip_grads:
-                        self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    reconstruction_loss.backward()
-                    if self.clip_grads:
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.optimizer.step()
+                    # Update the WNet by backpropagating reconstruction_loss
+                    if self.with_apex:
+                        # reconstruction_loss.backward()
+                        self.scaler.scale(reconstruction_loss).backward()
+                        if self.clip_grads:
+                            self.scaler.unscale_(self.optimizer)
+                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                    else:
+                        reconstruction_loss.backward()
+                        if self.clip_grads:
+                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                        self.optimizer.step()
 
                 loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
                 torch.cuda.empty_cache()
@@ -295,7 +299,10 @@ class Pipeline:
 
                 # Initialising the average loss metrics
                 total_soft_ncut_loss += soft_ncut_loss.detach().item()
-                total_reconstr_loss += reconstruction_loss.detach().item()
+                try:
+                    total_reconstr_loss += reconstruction_loss.detach().item()
+                except Exception as detach_error:
+                    total_reconstr_loss += reconstruction_loss
                 total_loss += loss.detach().item()
 
                 num_batches += 1
@@ -317,8 +324,9 @@ class Pipeline:
                                 reconstruction_loss=total_reconstr_loss,
                                 total_loss=total_loss)
             if self.wandb is not None:
-                self.wandb.log({"SoftNcutLoss_train": total_soft_ncut_loss, "ReconstructionLoss_train": total_reconstr_loss,
-                                "total_loss_train": total_loss})
+                self.wandb.log(
+                    {"SoftNcutLoss_train": total_soft_ncut_loss, "ReconstructionLoss_train": total_reconstr_loss,
+                     "total_loss_train": total_loss})
 
             if self.with_apex:
                 save_model(self.CHECKPOINT_PATH, {
@@ -378,8 +386,11 @@ class Pipeline:
                         soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
-                        loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
+                        if not str(self.train_encoder_only).lower() == "true":
+                            loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
                                     self.reconstr_loss_coeff * reconstruction_loss)
+                        else:
+                            loss = soft_ncut_loss
                         torch.cuda.empty_cache()
 
                 except Exception as error:
@@ -449,7 +460,7 @@ class Pipeline:
             ip_vol = torch.reshape(ip_vol[:, :, :, :144], (1, 1, 240, 240, 144))
             print("ip_vol shape: {}".format(ip_vol.shape))
             with autocast(enabled=self.with_apex):
-                class_preds, reconstructed_patch = self.model(ip_vol)
+                class_preds, reconstructed_patch = self.model(ip_vol, ops="both")
                 reconstructed_patch = torch.sigmoid(reconstructed_patch)
                 print("class_preds shape: {}".format(class_preds.shape))
                 print("reconstructed_patch shape: {}".format(reconstructed_patch.shape))
@@ -505,7 +516,8 @@ class Pipeline:
         for x in range(2 * (radius - 1) + 1):
             for y in range(2 * (radius - 1) + 1):
                 for z in range(2 * (radius - 1) + 1):
-                    dissim[:, :, :, :, :, x, y, z] = patch - padded_patch[:, :, x:shape[2] + x, y:shape[3] + y, z:shape[4] + z]
+                    dissim[:, :, :, :, :, x, y, z] = patch - padded_patch[:, :, x:shape[2] + x, y:shape[3] + y,
+                                                             z:shape[4] + z]
 
         temp_dissim = torch.exp(-1 * torch.square(dissim) / sigmaI ** 2)
         dist = torch.zeros((2 * (radius - 1) + 1, 2 * (radius - 1) + 1, 2 * (radius - 1) + 1))
@@ -527,7 +539,8 @@ class Pipeline:
             for y in torch.arange((radius - 1) * 2 + 1, dtype=torch.long):
                 depth = []
                 for z in torch.arange((radius - 1) * 2 + 1, dtype=torch.long):
-                    depth.append(padded_preds[:, :, x:x + preds.size()[2], y:y + preds.size()[3], z:z + preds.size()[4]].clone())
+                    depth.append(
+                        padded_preds[:, :, x:x + preds.size()[2], y:y + preds.size()[3], z:z + preds.size()[4]].clone())
                 width.append(torch.stack(depth, 5))
             cropped_seg.append(torch.stack(width, 5))
         cropped_seg = torch.stack(cropped_seg, 5)
@@ -538,5 +551,3 @@ class Pipeline:
         assocV = multi3.view(multi3.shape[0], multi3.shape[1], -1).sum(-1)
         assoc = assocA.div(assocV).sum(-1)
         soft_ncut_loss = torch.add(-assoc, num_classes)
-
-

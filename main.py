@@ -151,6 +151,9 @@ if __name__ == '__main__':
     parser.add_argument("-wandb",
                         default=True,
                         help="Set this to true to include wandb logging")
+    parser.add_argument("-train_encoder_only",
+                        default=False,
+                        help="Set this to true to include wandb logging")
     # parser.add_argument("-create_brain_mask",
     #                     type=bool,
     #                     default=False,
