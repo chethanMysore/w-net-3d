@@ -30,11 +30,11 @@ class ConvBlock(nn.Module):
             nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.ReLU(inplace=True))
+            nn.LeakyReLU(inplace=True))
 
     def forward(self, x):
         x = self.conv(x)
@@ -54,13 +54,13 @@ class SeparableConvBlock(nn.Module):
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=1,
                       bias=bias),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.ReLU(inplace=True))
+            nn.LeakyReLU(inplace=True))
 
     def forward(self, x):
         x = self.conv(x)
@@ -80,7 +80,7 @@ class UpConv(nn.Module):
             nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.ReLU(inplace=True))
+            nn.LeakyReLU(inplace=True))
 
     def forward(self, x):
         x = self.up(x)
