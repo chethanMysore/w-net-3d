@@ -196,6 +196,8 @@ class SoftNCutsLoss(nn.Module):
         Output :
         soft_n_cut_loss tensor for a batch of ip patch and K-class predictions
         """
+        print("batch_device: ", batch.get_device())
+        print("preds device: ", preds.get_device())
         padded_preds = self.pad(preds)
         # According to the weight formula, when Euclidean distance < r,
         # the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
