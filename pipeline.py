@@ -428,6 +428,19 @@ class Pipeline:
         no_patches = 0
         self.model.eval()
         data_loader = self.validate_loader
+        if data_loader is None:
+            validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
+                                                                      patch_size=self.patch_size,
+                                                                      samples_per_epoch=self.samples_per_epoch,
+                                                                      stride_length=self.stride_length,
+                                                                      stride_width=self.stride_width,
+                                                                      stride_depth=self.stride_depth,
+                                                                      is_train=False, num_worker=self.num_worker)
+            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
+                                                     num_samples=(self.samples_per_epoch // num_subjects) * 40)
+            data_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
+                                                               shuffle=False, num_workers=self.num_worker,
+                                                               sampler=sampler)
         writer = self.writer_validating
         with torch.no_grad():
             for index, patches_batch in enumerate(tqdm(data_loader)):
