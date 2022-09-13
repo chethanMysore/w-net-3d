@@ -66,12 +66,16 @@ class Pipeline:
         self.radius = cmd_args.radius
         self.sigmaI = cmd_args.sigmaI
         self.sigmaX = cmd_args.sigmaX
-        self.soft_ncut_loss = SoftNCutsLoss(radius=self.radius, sigmaI=self.sigmaI, sigmaX=self.sigmaX, num_classes=self.num_classes,
-                                            batch_size=self.batch_size,
-                                            patch_size=self.patch_size).cuda()
+        self.soft_ncut_loss = torch.nn.DataParallel(
+            SoftNCutsLoss(radius=self.radius, sigmaI=self.sigmaI, sigmaX=self.sigmaX, num_classes=self.num_classes,
+                          batch_size=self.batch_size,
+                          patch_size=self.patch_size))
+        self.soft_ncut_loss.cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
-        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path)
+        self.reconstruction_loss = torch.nn.DataParallel(
+            ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path))
+        self.reconstruction_loss.cuda()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -104,7 +108,8 @@ class Pipeline:
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
                                                      num_samples=(self.samples_per_epoch // num_subjects) * 40)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=self.num_worker, sampler=sampler)
+                                                               shuffle=False, num_workers=self.num_worker,
+                                                               sampler=sampler)
 
     @staticmethod
     def create_tio_sub_ds(vol_path, patch_size, samples_per_epoch, stride_length, stride_width, stride_depth,
@@ -428,7 +433,8 @@ class Pipeline:
                             continue
                         soft_ncut_loss = self.s_ncut_loss_coeff * (soft_ncut_loss.sum() / local_batch.shape[0])
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
+                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
+                                                                                                  local_batch)
                         if not str(self.train_encoder_only).lower() == "true":
                             loss = soft_ncut_loss + reconstruction_loss
                         else:
