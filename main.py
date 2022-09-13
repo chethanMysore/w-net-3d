@@ -137,15 +137,15 @@ if __name__ == '__main__':
                         default="test_subject",
                         help="subject name of the predictor image")
     parser.add_argument("-radius",
-                        type=float,
+                        type=int,
                         default=4,
                         help="radius of the voxel")
     parser.add_argument("-sigmaI",
-                        type=float,
+                        type=int,
                         default=10,
                         help="SigmaI")
     parser.add_argument("-sigmaX",
-                        type=float,
+                        type=int,
                         default=4,
                         help="SigmaX")
     parser.add_argument("-wandb",
