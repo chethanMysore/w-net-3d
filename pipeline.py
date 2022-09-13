@@ -73,7 +73,8 @@ class Pipeline:
         self.soft_ncut_loss.cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
-        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path).cuda()
+        self.reconstruction_loss = torch.nn.DataParallel(ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path))
+        self.reconstruction_loss.cuda()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -219,8 +220,16 @@ class Pipeline:
 
                 # Update only encoder by backpropagating soft-n-cut loss
                 if self.with_apex:
+                    if type(soft_ncut_loss) is list:
+                        for i in range(len(soft_ncut_loss)):
+                            if i + 1 == len(soft_ncut_loss):  # final loss
+                                self.scaler.scale(soft_ncut_loss[i]).backward()
+                            else:
+                                self.scaler.scale(soft_ncut_loss[i]).backward(retain_graph=True)
+                        soft_ncut_loss = torch.sum(torch.stack(soft_ncut_loss))
+                    else:
+                        self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
                     # soft_ncut_loss.backward()
-                    self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
                     if self.clip_grads:
                         # self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
@@ -234,8 +243,16 @@ class Pipeline:
 
                 # Update the WNet by backpropagating reconstruction_loss
                 if self.with_apex:
+                    if type(reconstruction_loss) is list:
+                        for i in range(len(reconstruction_loss)):
+                            if i + 1 == len(reconstruction_loss):  # final loss
+                                self.scaler.scale(reconstruction_loss[i]).backward()
+                            else:
+                                self.scaler.scale(reconstruction_loss[i]).backward(retain_graph=True)
+                        reconstruction_loss = torch.sum(torch.stack(reconstruction_loss))
+                    else:
+                        self.scaler.scale(reconstruction_loss).backward()
                     # reconstruction_loss.backward()
-                    self.scaler.scale(reconstruction_loss).backward()
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
