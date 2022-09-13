@@ -54,6 +54,9 @@ if __name__ == '__main__':
     parser.add_argument('-predict',
                         default=False,
                         help="To predict a segmentation output of the model and to get a diff between label and output")
+    parser.add_argument('-testing_validation',
+                        default=False,
+                        help="To train the model")
     parser.add_argument('-predictor_path',
                         default="",
                         help="Path to the input image to predict an output, ex:/home/test/ww25.nii ")
@@ -247,6 +250,9 @@ if __name__ == '__main__':
                              label_path=args.predictor_label_path)
             # class_preds = torch.load(args.predictor_path)
             # pipeline.extract_segmentation(class_preds)
+        if args.testing_validation:
+            pipeline.validate(0, 0)
+            torch.cuda.empty_cache()  # to avoid memory errors
 
     except Exception as error:
         print(error)
