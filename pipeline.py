@@ -91,7 +91,7 @@ class Pipeline:
                                                       patch_size=self.patch_size,
                                                       samples_per_epoch=self.samples_per_epoch,
                                                       stride_length=self.stride_length, stride_width=self.stride_width,
-                                                      stride_depth=self.stride_depth)
+                                                      stride_depth=self.stride_depth, num_worker=self.num_worker)
             self.train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size, shuffle=True,
                                                             num_workers=0)
             validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
@@ -100,7 +100,7 @@ class Pipeline:
                                                                       stride_length=self.stride_length,
                                                                       stride_width=self.stride_width,
                                                                       stride_depth=self.stride_depth,
-                                                                      is_train=False)
+                                                                      is_train=False, num_worker=self.num_worker)
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
                                                      num_samples=(self.samples_per_epoch // num_subjects) * 40)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
@@ -108,7 +108,7 @@ class Pipeline:
 
     @staticmethod
     def create_tio_sub_ds(vol_path, patch_size, samples_per_epoch, stride_length, stride_width, stride_depth,
-                          is_train=True, get_subjects_only=False):
+                          is_train=True, get_subjects_only=False, num_worker=0):
 
         vols = glob(vol_path + "*.nii") + glob(vol_path + "*.nii.gz")
         subjects = []
@@ -145,7 +145,7 @@ class Pipeline:
                 max_length=(samples_per_epoch // len(subjects)) * 4,
                 samples_per_volume=(samples_per_epoch // len(subjects)),
                 sampler=sampler,
-                num_workers=8,
+                num_workers=num_worker,
                 start_background=True
             )
             return patches_queue
