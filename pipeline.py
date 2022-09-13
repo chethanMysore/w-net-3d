@@ -66,7 +66,7 @@ class Pipeline:
         self.radius = cmd_args.radius
         self.sigmaI = cmd_args.sigmaI
         self.sigmaX = cmd_args.sigmaX
-        self.soft_ncut_loss = SoftNCutsLoss(radius=4, sigmaI=10, sigmaX=4, num_classes=self.num_classes,
+        self.soft_ncut_loss = SoftNCutsLoss(radius=self.radius, sigmaI=self.sigmaI, sigmaX=self.sigmaX, num_classes=self.num_classes,
                                             batch_size=self.batch_size,
                                             patch_size=self.patch_size).cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
