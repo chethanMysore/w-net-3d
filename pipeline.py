@@ -427,8 +427,9 @@ class Pipeline:
         total_soft_ncut_loss, total_reconstr_loss, total_loss = 0, 0, 0
         no_patches = 0
         self.model.eval()
-        data_loader = self.validate_loader
-        if data_loader is None:
+        try:
+            data_loader = self.validate_loader
+        except Exception as error:
             validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
                                                                       patch_size=self.patch_size,
                                                                       samples_per_epoch=self.samples_per_epoch,
