@@ -148,11 +148,11 @@ class SoftNCutsLoss(nn.Module):
         self.ip_shape = (batch_size, 1, patch_size, patch_size, patch_size)
         self.pad = torch.nn.ConstantPad3d(radius - 1, np.finfo(np.float).eps)
         self.dissim_matrix = torch.zeros(
-            (self.ip_shape[0], self.ip_shape[1], self.ip_shape[2], self.ip_shape[3], self.ip_shape[4],
+            (self.ip_shape[1], self.ip_shape[2], self.ip_shape[3], self.ip_shape[4],
              (radius - 1) * 2 + 1,
              (radius - 1) * 2 + 1, (radius - 1) * 2 + 1)).cuda()
         self.dist = torch.zeros((2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1)).cuda()
-        self.cropped_seg = torch.zeros((batch_size, num_classes, patch_size, patch_size, patch_size,
+        self.cropped_seg = torch.zeros((num_classes, patch_size, patch_size, patch_size,
                                         2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1,
                                         2 * (self.radius - 1) + 1)).cuda()
 
@@ -167,7 +167,7 @@ class SoftNCutsLoss(nn.Module):
         # According to the weight formula, when Euclidean distance < r,the weight is 0,
         # so reduce the dissim matrix size to radius-1 to save time and space.
         # print("calculating weights.")
-        temp_dissim = self.dissim_matrix[:batch.shape[0], :, :, :, :, :, :, :].clone()
+        temp_dissim = self.dissim_matrix.expand(batch.shape[0], -1, -1, -1, -1, -1, -1, -1)
         for x in range(2 * (self.radius - 1) + 1):
             for y in range(2 * (self.radius - 1) + 1):
                 for z in range(2 * (self.radius - 1) + 1):
@@ -175,7 +175,7 @@ class SoftNCutsLoss(nn.Module):
                                                                   y:self.patch_size + y, z:self.patch_size + z]
 
         temp_dissim = torch.exp(-1 * torch.square(temp_dissim) / self.sigmaI ** 2)
-        temp_dist = self.dist.clone()
+        temp_dist = self.dist
         for x in range(1 - self.radius, self.radius):
             for y in range(1 - self.radius, self.radius):
                 for z in range(1 - self.radius, self.radius):
@@ -203,7 +203,7 @@ class SoftNCutsLoss(nn.Module):
         weight, sum_weight = self._cal_weights(batch=batch, padded_batch=padded_batch)
 
         # too many values to unpack
-        temp_cropped_seg = self.cropped_seg[:preds.shape[0], :, :, :, :, :, :, :].clone()
+        temp_cropped_seg = self.cropped_seg.expand(preds.shape[0], -1, -1, -1, -1, -1, -1, -1)
         for x in range((self.radius - 1) * 2 + 1):
             for y in range((self.radius - 1) * 2 + 1):
                 for z in range((self.radius - 1) * 2 + 1):
