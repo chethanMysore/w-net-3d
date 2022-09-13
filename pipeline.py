@@ -292,7 +292,7 @@ class Pipeline:
                 #             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                 #         self.optimizer.step()
 
-                loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (self.reconstr_loss_coeff * reconstruction_loss)
+                loss = soft_ncut_loss + reconstruction_loss
                 torch.cuda.empty_cache()
 
                 # except Exception as error:
@@ -426,12 +426,11 @@ class Pipeline:
                         if torch.any(torch.isnan(soft_ncut_loss)):
                             self.logger.info("Found nan in soft_ncut_loss")
                             continue
-                        soft_ncut_loss = soft_ncut_loss.sum() / local_batch.shape[0]
+                        soft_ncut_loss = self.s_ncut_loss_coeff * (soft_ncut_loss.sum() / local_batch.shape[0])
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
+                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
                         if not str(self.train_encoder_only).lower() == "true":
-                            loss = (self.s_ncut_loss_coeff * soft_ncut_loss) + (
-                                    self.reconstr_loss_coeff * reconstruction_loss)
+                            loss = soft_ncut_loss + reconstruction_loss
                         else:
                             loss = soft_ncut_loss
                         torch.cuda.empty_cache()
