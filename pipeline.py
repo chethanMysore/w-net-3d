@@ -73,9 +73,7 @@ class Pipeline:
         self.soft_ncut_loss.cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
-        self.reconstruction_loss = torch.nn.DataParallel(
-            ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path))
-        self.reconstruction_loss.cuda()
+        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path).cuda()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
