@@ -156,14 +156,50 @@ class SoftNCutsLoss(nn.Module):
                                         2 * (self.radius - 1) + 1, 2 * (self.radius - 1) + 1,
                                         2 * (self.radius - 1) + 1)).cuda()
 
-    def _cal_weights(self, batch, padded_batch):
+    # def _cal_weights(self, batch, padded_batch):
+    #     """
+    #     Inputs:
+    #     batch : ip batch (B x C x D x H x W)
+    #     padded_batch : padded ip batch
+    #     Output :
+    #     weight and sum weight
+    #     """
+    #     # According to the weight formula, when Euclidean distance < r,the weight is 0,
+    #     # so reduce the dissim matrix size to radius-1 to save time and space.
+    #     # print("calculating weights.")
+    #     temp_dissim = self.dissim_matrix.expand(batch.shape[0], -1, -1, -1, -1, -1, -1, -1).clone()
+    #     for x in range(2 * (self.radius - 1) + 1):
+    #         for y in range(2 * (self.radius - 1) + 1):
+    #             for z in range(2 * (self.radius - 1) + 1):
+    #                 temp_dissim[:, :, :, :, :, x, y, z] = batch - padded_batch[:, :, x:self.patch_size + x,
+    #                                                               y:self.patch_size + y, z:self.patch_size + z]
+    #
+    #     temp_dissim = torch.exp(-1 * torch.square(temp_dissim) / self.sigmaI ** 2)
+    #     temp_dist = self.dist.clone()
+    #     for x in range(1 - self.radius, self.radius):
+    #         for y in range(1 - self.radius, self.radius):
+    #             for z in range(1 - self.radius, self.radius):
+    #                 if x ** 2 + y ** 2 + z ** 2 < self.radius ** 2:
+    #                     temp_dist[x + self.radius - 1, y + self.radius - 1, z + self.radius - 1] = np.exp(
+    #                         -(x ** 2 + y ** 2 + z ** 2) / self.sigmaX ** 2)
+    #
+    #     weight = torch.multiply(temp_dissim, temp_dist)
+    #     del temp_dissim, temp_dist
+    #     sum_weight = weight.sum(-1).sum(-1).sum(-1)
+    #     return weight, sum_weight
+
+    def forward(self, batch, preds):
         """
         Inputs:
-        batch : ip batch (B x C x D x H x W)
-        padded_batch : padded ip batch
+        patch : ip patch (B x C x D x H x W)
+        preds : class predictions (B x K x D x H x W)
         Output :
-        weight and sum weight
+        soft_n_cut_loss tensor for a batch of ip patch and K-class predictions
         """
+        padded_preds = self.pad(preds)
+        # According to the weight formula, when Euclidean distance < r,
+        # the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
+        padded_batch = self.pad(batch)
         # According to the weight formula, when Euclidean distance < r,the weight is 0,
         # so reduce the dissim matrix size to radius-1 to save time and space.
         # print("calculating weights.")
@@ -186,21 +222,7 @@ class SoftNCutsLoss(nn.Module):
         weight = torch.multiply(temp_dissim, temp_dist)
         del temp_dissim, temp_dist
         sum_weight = weight.sum(-1).sum(-1).sum(-1)
-        return weight, sum_weight
-
-    def forward(self, batch, preds):
-        """
-        Inputs:
-        patch : ip patch (B x C x D x H x W)
-        preds : class predictions (B x K x D x H x W)
-        Output :
-        soft_n_cut_loss tensor for a batch of ip patch and K-class predictions
-        """
-        padded_preds = self.pad(preds)
-        # According to the weight formula, when Euclidean distance < r,
-        # the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
-        padded_batch = self.pad(batch)
-        weight, sum_weight = self._cal_weights(batch=batch, padded_batch=padded_batch)
+        # weight, sum_weight = self._cal_weights(batch=batch, padded_batch=padded_batch)
 
         # too many values to unpack
         temp_cropped_seg = self.cropped_seg.expand(preds.shape[0], -1, -1, -1, -1, -1, -1, -1).clone()
