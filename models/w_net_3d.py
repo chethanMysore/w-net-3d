@@ -221,15 +221,16 @@ class WNet3D(nn.Module):
 
         self.activation = torch.nn.Softmax(dim=1)
 
-    def forward(self, x, ops="both"):
-        encoder_op = self.Encoder(x)
+    def forward(self, ip, ip_mask, ops="both"):
+        encoder_op = self.Encoder(ip)
         class_prob = self.activation(encoder_op)
+        class_prob_mask = ip_mask * class_prob
         if ops == "enc":
-            return class_prob.float()
-        reconstructed_op = self.Decoder(class_prob)
+            return class_prob_mask.float()
+        reconstructed_op = self.Decoder(class_prob_mask)
         if ops == "dec":
             return reconstructed_op.float()
         if ops == "both":
-            return class_prob.float(), reconstructed_op.float()
+            return class_prob_mask.float(), reconstructed_op.float()
         else:
             raise ValueError('Invalid ops, ops must be in [enc, dec, both]')
