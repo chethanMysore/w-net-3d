@@ -464,6 +464,9 @@ class Pipeline:
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
                                                                                                   local_batch)
+                        if type(soft_ncut_loss) is list:
+                            soft_ncut_loss = soft_ncut_loss.sum()
+                        
                         if not str(self.train_encoder_only).lower() == "true":
                             loss = soft_ncut_loss + reconstruction_loss
                         else:
