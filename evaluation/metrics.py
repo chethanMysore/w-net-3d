@@ -285,7 +285,7 @@ class SoftNCutsLoss(nn.Module):
         denominator = torch.sum(preds * torch.sum(weights, dim=(1, 2, 3, 4))
                                 .reshape(batch_size, self.patch_size, self.patch_size, self.patch_size),
                                 dim=(1, 2, 3, 4))
-        return torch.div(numerator, denominator)
+        return torch.div(numerator + np.finfo(np.float).eps, denominator + np.finfo(np.float).eps)
 
     def forward(self, batch, preds):
         batch_size = batch.shape[0]
