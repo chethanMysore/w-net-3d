@@ -236,12 +236,12 @@ class Pipeline:
                     #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                     # self.scaler.step(self.optimizer)
                     # self.scaler.update()
-                    self.optimizer.step()
+                    # self.optimizer.step()
                 else:
                     soft_ncut_loss.backward(retain_graph=True)
                     # if self.clip_grads:
                     #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.optimizer.step()
+                    # self.optimizer.step()
 
                 # Update the WNet by backpropagating reconstruction_loss
                 if self.with_apex:
