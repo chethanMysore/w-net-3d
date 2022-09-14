@@ -26,18 +26,18 @@ __status__ = "Development"
 
 class SoftNCutsLoss_v1(nn.Module):
     def __init__(self, depth, length, width, std_position=1):
-        super(SoftNCutsLoss, self).__init__()
+        super(SoftNCutsLoss_v1, self).__init__()
         meshgrid_x, meshgrid_y, meshgrid_z = torch.meshgrid(torch.arange(0, depth, dtype=float),
                                                             torch.arange(0, length, dtype=float),
                                                             torch.arange(0, width, dtype=float))
         meshgrid_x = torch.reshape(meshgrid_x, (length * width * depth,))
         meshgrid_y = torch.reshape(meshgrid_y, (length * width * depth,))
         meshgrid_z = torch.reshape(meshgrid_z, (length * width * depth,))
-        A_x = SoftNCutsLoss._outer_product(meshgrid_x, torch.ones(meshgrid_x.size(), dtype=meshgrid_x.dtype,
+        A_x = SoftNCutsLoss_v1._outer_product(meshgrid_x, torch.ones(meshgrid_x.size(), dtype=meshgrid_x.dtype,
                                                                   device=meshgrid_x.device))
-        A_y = SoftNCutsLoss._outer_product(meshgrid_y, torch.ones(meshgrid_y.size(), dtype=meshgrid_y.dtype,
+        A_y = SoftNCutsLoss_v1._outer_product(meshgrid_y, torch.ones(meshgrid_y.size(), dtype=meshgrid_y.dtype,
                                                                   device=meshgrid_y.device))
-        A_z = SoftNCutsLoss._outer_product(meshgrid_z, torch.ones(meshgrid_z.size(), dtype=meshgrid_z.dtype,
+        A_z = SoftNCutsLoss_v1._outer_product(meshgrid_z, torch.ones(meshgrid_z.size(), dtype=meshgrid_z.dtype,
                                                                   device=meshgrid_z.device))
 
         del meshgrid_x, meshgrid_y, meshgrid_z
@@ -82,7 +82,7 @@ class SoftNCutsLoss_v1(nn.Module):
         Used parameters :
         n : number of pixels
         """
-        A = SoftNCutsLoss._outer_product(flatten_patch, torch.ones_like(flatten_patch))
+        A = SoftNCutsLoss_v1._outer_product(flatten_patch, torch.ones_like(flatten_patch))
         intensity_weight = torch.exp(-1 * torch.square((torch.divide((A - A.T), std_intensity)))).detach().cpu()
         del A
         return torch.multiply(intensity_weight, self.dist_weight)
@@ -95,7 +95,7 @@ class SoftNCutsLoss_v1(nn.Module):
         weights : edge weights n*n tensor
         """
         k_class_prob = torch.reshape(k_class_prob, (-1,))
-        return torch.sum(torch.multiply(weights, SoftNCutsLoss._outer_product(k_class_prob, k_class_prob)))
+        return torch.sum(torch.multiply(weights, SoftNCutsLoss_v1._outer_product(k_class_prob, k_class_prob)))
 
     @staticmethod
     def _denominator(k_class_prob, weights):
@@ -105,7 +105,7 @@ class SoftNCutsLoss_v1(nn.Module):
         weights : edge weights	n*n tensor
         """
         k_class_prob = torch.reshape(k_class_prob, (-1,))
-        return torch.sum(torch.multiply(weights, SoftNCutsLoss._outer_product(k_class_prob,
+        return torch.sum(torch.multiply(weights, SoftNCutsLoss_v1._outer_product(k_class_prob,
                                                                               torch.ones(k_class_prob.size(),
                                                                                          dtype=k_class_prob.dtype,
                                                                                          layout=k_class_prob.layout,
@@ -129,7 +129,7 @@ class SoftNCutsLoss_v1(nn.Module):
 
         for t in range(k):
             soft_n_cut_loss = soft_n_cut_loss - (
-                    SoftNCutsLoss._numerator(prob[:, :, :, t], weights) / SoftNCutsLoss._denominator(prob[:, :, :, t],
+                    SoftNCutsLoss_v1._numerator(prob[:, :, :, t], weights) / SoftNCutsLoss_v1._denominator(prob[:, :, :, t],
                                                                                                      weights))
 
         del weights
@@ -137,9 +137,9 @@ class SoftNCutsLoss_v1(nn.Module):
         return soft_n_cut_loss.float().cuda()
 
 
-class SoftNCutsLoss(nn.Module):
+class SoftNCutsLoss_v2(nn.Module):
     def __init__(self, radius=4, sigmaI=10, sigmaX=4, num_classes=8, batch_size=15, patch_size=32):
-        super(SoftNCutsLoss, self).__init__()
+        super(SoftNCutsLoss_v2, self).__init__()
         self.radius = radius
         self.sigmaI = sigmaI
         self.sigmaX = sigmaX
@@ -232,6 +232,68 @@ class SoftNCutsLoss(nn.Module):
 
         soft_n_cut_loss = torch.add(-assoc, self.num_classes)
         return soft_n_cut_loss
+
+
+class SoftNCutsLoss(nn.Module):
+    def __init__(self, radius=4, sigma_x=4, sigma_i=10, patch_size=32, n_channel=1):
+        super(SoftNCutsLoss, self).__init__()
+        self.radius = radius
+        self.sigma_x = sigma_x
+        self.sigma_i = sigma_i
+        self.patch_size = patch_size
+        self.n_channel = n_channel
+        self.pad = torch.nn.ConstantPad3d(radius, np.finfo(np.float).eps)
+        self.neighborhood_size = radius * 2 + 1
+        dist_dim = (torch.arange(1, self.neighborhood_size + 1) - torch.arange(1, self.neighborhood_size + 1)[radius]) \
+            .expand(self.neighborhood_size, self.neighborhood_size, self.neighborhood_size)
+        dist3d = 3 * (dist_dim ** 2)
+        dist_mask = dist3d.le(radius)
+        dist_weights = torch.exp(torch.div(-1 * dist3d, sigma_x ** 2))
+        self.dist_weights = torch.mul(dist_mask, dist_weights)
+
+    def _cal_weights(self, batch):
+        padded_batch = self.pad(batch)
+        padded_dissim = padded_batch.unfold(2, self.radius * 2 + 1, 1) \
+            .unfold(3, self.radius * 2 + 1, 1) \
+            .unfold(4, self.radius * 2 + 1, 1)
+        padded_dissim = padded_dissim.contiguous().view(batch.shape[0], self.n_channel, -1,
+                                                        self.neighborhood_size, self.neighborhood_size,
+                                                        self.neighborhood_size)
+        padded_dissim = padded_dissim.permute(0, 2, 1, 3, 4, 5)
+        padded_dissim = padded_dissim.view(-1, self.n_channel,
+                                           self.neighborhood_size, self.neighborhood_size, self.neighborhood_size)
+        center_values = padded_dissim[:, :, self.radius, self.radius, self.radius]
+        center_values = center_values[:, :, None, None, None]
+        center_values = center_values.expand(-1, -1,
+                                             self.neighborhood_size, self.neighborhood_size, self.neighborhood_size)
+        padded_dissim = torch.exp(torch.div(-1 * ((padded_dissim - center_values) ** 2), self.sigma_i ** 2))
+        return torch.mul(padded_dissim, self.dist_weights.clone().cuda())
+
+    def _cal_loss_for_k(self, weights, preds, batch_size):
+        padded_preds = self.pad(preds)
+        pred_seg = padded_preds.unfold(2, self.neighborhood_size, 1) \
+            .unfold(3, self.neighborhood_size, 1) \
+            .unfold(4, self.neighborhood_size, 1)
+        pred_seg = pred_seg.contiguous().view(batch_size, self.n_channel, -1,
+                                              self.neighborhood_size, self.neighborhood_size, self.neighborhood_size)
+        pred_seg = pred_seg.permute(0, 2, 1, 3, 4, 5)
+        pred_seg = pred_seg.view(-1, self.n_channel,
+                                 self.neighborhood_size, self.neighborhood_size, self.neighborhood_size)
+        numerator = weights * pred_seg
+        numerator = torch.sum(preds * torch.sum(numerator, dim=(1, 2, 3, 4))
+                              .reshape(batch_size, self.patch_size, self.patch_size, self.patch_size), dim=(1, 2, 3, 4))
+        denominator = torch.sum(preds * torch.sum(weights, dim=(1, 2, 3, 4))
+                                .reshape(batch_size, self.patch_size, self.patch_size, self.patch_size),
+                                dim=(1, 2, 3, 4))
+        return torch.div(numerator, denominator)
+
+    def forward(self, batch, preds):
+        batch_size = batch.shape[0]
+        k = preds.shape[1]  # num classes
+        weights = self._cal_weights(batch)
+        loss = [self._cal_loss_for_k(weights, preds[:, (i,), :, :, :], batch_size) for i in range(k)]
+        total_loss = torch.stack(loss)
+        return torch.mean(k - torch.sum(total_loss, dim=0))
 
 
 class ReconstructionLoss(nn.Module):
