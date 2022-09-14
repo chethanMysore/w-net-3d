@@ -221,18 +221,22 @@ class Pipeline:
                     if type(soft_ncut_loss) is list:
                         for i in range(len(soft_ncut_loss)):
                             if i + 1 == len(soft_ncut_loss):  # final loss
-                                self.scaler.scale(soft_ncut_loss[i]).backward()
+                                # self.scaler.scale(soft_ncut_loss[i]).backward()
+                                soft_ncut_loss[i].backward()
                             else:
-                                self.scaler.scale(soft_ncut_loss[i]).backward(retain_graph=True)
+                                # self.scaler.scale(soft_ncut_loss[i]).backward(retain_graph=True)
+                                soft_ncut_loss[i].backward(retain_graph=True)
                         soft_ncut_loss = torch.sum(torch.stack(soft_ncut_loss))
                     else:
-                        self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
+                        # self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
+                        soft_ncut_loss.backward(retain_graph=True)
                     # soft_ncut_loss.backward()
                     if self.clip_grads:
-                        self.scaler.unscale_(self.optimizer)
+                        # self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
+                    # self.scaler.step(self.optimizer)
+                    # self.scaler.update()
+                    self.optimizer.step()
                 else:
                     soft_ncut_loss.backward(retain_graph=True)
                     if self.clip_grads:
@@ -244,18 +248,22 @@ class Pipeline:
                     if type(reconstruction_loss) is list:
                         for i in range(len(reconstruction_loss)):
                             if i + 1 == len(reconstruction_loss):  # final loss
-                                self.scaler.scale(reconstruction_loss[i]).backward()
+                                # self.scaler.scale(reconstruction_loss[i]).backward()
+                                reconstruction_loss[i].backward()
                             else:
-                                self.scaler.scale(reconstruction_loss[i]).backward(retain_graph=True)
+                                # self.scaler.scale(reconstruction_loss[i]).backward(retain_graph=True)
+                                reconstruction_loss[i].backward(retain_graph=True)
                         reconstruction_loss = torch.sum(torch.stack(reconstruction_loss))
                     else:
-                        self.scaler.scale(reconstruction_loss).backward()
+                        # self.scaler.scale(reconstruction_loss).backward()
+                        reconstruction_loss.backward()
                     # reconstruction_loss.backward()
                     if self.clip_grads:
-                        self.scaler.unscale_(self.optimizer)
+                        # self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
+                    # self.scaler.step(self.optimizer)
+                    # self.scaler.update()
+                    self.optimizer.step()
                 else:
                     reconstruction_loss.backward()
                     if self.clip_grads:
