@@ -222,7 +222,7 @@ class Pipeline:
                                 self.scaler.scale(soft_ncut_loss[i]).backward(retain_graph=True)
                         soft_ncut_loss = torch.sum(torch.stack(soft_ncut_loss))
                     else:
-                        self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
+                        self.scaler.scale(soft_ncut_loss.sum()).backward(retain_graph=True)
                     # soft_ncut_loss.backward()
                     if self.clip_grads:
                         # self.scaler.unscale_(self.optimizer)
@@ -230,7 +230,7 @@ class Pipeline:
                     # self.scaler.step(self.optimizer)
                     # self.scaler.update()
                 else:
-                    soft_ncut_loss.backward(retain_graph=True)
+                    soft_ncut_loss.sum().backward(retain_graph=True)
                     if self.clip_grads:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                     # self.optimizer.step()
