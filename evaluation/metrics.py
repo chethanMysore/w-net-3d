@@ -293,7 +293,7 @@ class SoftNCutsLoss(nn.Module):
         weights = self._cal_weights(batch)
         loss = [self._cal_loss_for_k(weights, preds[:, (i,), :, :, :], batch_size) for i in range(k)]
         total_loss = torch.stack(loss)
-        return torch.mean(k - torch.sum(total_loss, dim=0))
+        return k - torch.sum(total_loss, dim=0)
 
 
 class ReconstructionLoss(nn.Module):

@@ -207,7 +207,11 @@ class Pipeline:
                 self.optimizer.zero_grad()
                 with autocast(enabled=self.with_apex):
                     class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
-                    soft_ncut_loss = self.s_ncut_loss_coeff * self.soft_ncut_loss(local_batch, class_preds)
+                    soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
+                    if torch.any(torch.isnan(soft_ncut_loss)):
+                        self.logger.info("Found nan in soft_ncut_loss")
+                        continue
+                    soft_ncut_loss = self.s_ncut_loss_coeff * (soft_ncut_loss.sum() / local_batch.shape[0])
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
                     reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
                                                                                               local_batch)
@@ -222,7 +226,7 @@ class Pipeline:
                                 self.scaler.scale(soft_ncut_loss[i]).backward(retain_graph=True)
                         soft_ncut_loss = torch.sum(torch.stack(soft_ncut_loss))
                     else:
-                        self.scaler.scale(soft_ncut_loss.sum()).backward(retain_graph=True)
+                        self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
                     # soft_ncut_loss.backward()
                     if self.clip_grads:
                         # self.scaler.unscale_(self.optimizer)
@@ -230,7 +234,7 @@ class Pipeline:
                     # self.scaler.step(self.optimizer)
                     # self.scaler.update()
                 else:
-                    soft_ncut_loss.sum().backward(retain_graph=True)
+                    soft_ncut_loss.backward(retain_graph=True)
                     if self.clip_grads:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                     # self.optimizer.step()
@@ -450,7 +454,11 @@ class Pipeline:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
                         class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
-                        soft_ncut_loss = self.s_ncut_loss_coeff * self.soft_ncut_loss(local_batch, class_preds)
+                        soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
+                        if torch.any(torch.isnan(soft_ncut_loss)):
+                            self.logger.info("Found nan in soft_ncut_loss")
+                            continue
+                        soft_ncut_loss = self.s_ncut_loss_coeff * (soft_ncut_loss.sum() / local_batch.shape[0])
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
                                                                                                   local_batch)
