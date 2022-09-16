@@ -272,7 +272,7 @@ class Pipeline:
                 # try:
                 with autocast(enabled=self.with_apex):
                     # Get the classification response map(normalized) and respective class assignments after argmax
-                    class_preds = self.model(local_batch, ops="enc")
+                    class_preds = self.model(local_batch, local_batch_mask, ops="enc")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                     if torch.any(torch.isnan(soft_ncut_loss)):
                         self.logger.info("Found nan in soft_ncut_loss")
@@ -299,7 +299,7 @@ class Pipeline:
                     # self.optimizer.zero_grad()
 
                     with autocast(enabled=self.with_apex):
-                        reconstructed_patch = self.model(local_batch, ops="dec")
+                        reconstructed_patch = self.model(local_batch, local_batch_mask, ops="dec")
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
                                                                                                   local_batch)
