@@ -303,3 +303,12 @@ class ReconstructionLoss(nn.Module):
 
     def forward(self, y_pred, y_true):
         return self.loss(y_pred, y_true)
+
+
+def l2_regularisation_loss(model):
+    l2_reg = torch.tensor(0.0, requires_grad=True)
+
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            l2_reg = l2_reg + param.norm(2)
+    return l2_reg

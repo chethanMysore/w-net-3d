@@ -136,6 +136,10 @@ if __name__ == '__main__':
                         type=float,
                         default=1.0,
                         help="loss coefficient for reconstruction loss")
+    parser.add_argument("-reg_alpha",
+                        type=float,
+                        default=0.001,
+                        help="loss coefficient for regularisation loss")
     parser.add_argument("-predictor_subject_name",
                         default="test_subject",
                         help="subject name of the predictor image")

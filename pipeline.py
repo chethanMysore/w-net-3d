@@ -9,7 +9,7 @@ import torchio as tio
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
-from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss)
+from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisation_loss)
 # from torchmetrics.functional import structural_similarity_index_measure
 # from pytorch_msssim import ssim
 from utils.results_analyser import *
@@ -61,6 +61,7 @@ class Pipeline:
         # Losses
         self.s_ncut_loss_coeff = cmd_args.s_ncut_loss_coeff
         self.reconstr_loss_coeff = cmd_args.reconstr_loss_coeff
+        self.reg_alpha = cmd_args.reg_alpha
 
         # Following metrics can be used to evaluate
         self.radius = cmd_args.radius
@@ -190,6 +191,7 @@ class Pipeline:
             self.model.train()  # make sure to assign mode:train, because in validation, mode is assigned as eval
             total_soft_ncut_loss = 0
             total_reconstr_loss = 0
+            total_reg_loss = 0
             total_loss = 0
             batch_index = 0
             num_batches = 0
@@ -295,6 +297,7 @@ class Pipeline:
                     self.optimizer.step()
 
                 reconstruction_loss = 0
+                reg_loss = 0
                 if not str(self.train_encoder_only).lower() == "true":
                     self.optimizer.zero_grad()
 
@@ -303,23 +306,25 @@ class Pipeline:
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
                                                                                                   local_batch)
+                        reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
+                        recr_reg_loss = reconstruction_loss + reg_loss
 
                     # Update the WNet by backpropagating reconstruction_loss
                     if self.with_apex:
                         # reconstruction_loss.backward()
-                        self.scaler.scale(reconstruction_loss).backward()
+                        self.scaler.scale(recr_reg_loss).backward()
                         if self.clip_grads:
                             self.scaler.unscale_(self.optimizer)
                             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                     else:
-                        reconstruction_loss.backward()
+                        recr_reg_loss.backward()
                         if self.clip_grads:
                             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                         self.optimizer.step()
 
-                loss = soft_ncut_loss + reconstruction_loss
+                loss = soft_ncut_loss + reconstruction_loss + reg_loss
                 torch.cuda.empty_cache()
 
                 # except Exception as error:
@@ -328,7 +333,7 @@ class Pipeline:
 
                 self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
                                  "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
-                                 str(reconstruction_loss) + " total_loss: " + str(loss))
+                                 str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
 
                 # # Calculating gradients
                 # if self.with_apex:
@@ -369,8 +374,10 @@ class Pipeline:
                 total_soft_ncut_loss += soft_ncut_loss.detach().item()
                 try:
                     total_reconstr_loss += reconstruction_loss.detach().item()
+                    total_reg_loss += reg_loss.detach().item()
                 except Exception as detach_error:
                     total_reconstr_loss += reconstruction_loss
+                    total_reg_loss += reg_loss
                 total_loss += loss.detach().item()
                 reconstructed_patch.detach()
                 class_preds.detach()
@@ -384,20 +391,23 @@ class Pipeline:
             # Calculate the average loss per batch in one epoch
             total_soft_ncut_loss /= (num_batches + 1.0)
             total_reconstr_loss /= (num_batches + 1.0)
+            total_reg_loss /= (num_batches + 1.0)
             total_loss /= (num_batches + 1.0)
 
             # Print every epoch
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
                              "\n SoftNcutLoss: " + str(total_soft_ncut_loss) + " ReconstructionLoss: " +
-                             str(total_reconstr_loss) + " total_loss: " + str(total_loss))
+                             str(total_reconstr_loss) + " reg_loss: " + str(total_reg_loss) +
+                             " total_loss: " + str(total_loss))
             write_epoch_summary(writer=self.writer_training, index=epoch,
                                 soft_ncut_loss=total_soft_ncut_loss,
                                 reconstruction_loss=total_reconstr_loss,
+                                reg_loss=total_reg_loss,
                                 total_loss=total_loss)
             if self.wandb is not None:
                 self.wandb.log(
                     {"SoftNcutLoss_train": total_soft_ncut_loss, "ReconstructionLoss_train": total_reconstr_loss,
-                     "total_loss_train": total_loss}, step=epoch)
+                     "total_reg_loss_train": total_reg_loss, "total_loss_train": total_loss}, step=epoch)
 
             if self.with_apex:
                 save_model(self.CHECKPOINT_PATH, {
