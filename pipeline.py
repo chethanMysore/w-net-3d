@@ -372,6 +372,9 @@ class Pipeline:
                 except Exception as detach_error:
                     total_reconstr_loss += reconstruction_loss
                 total_loss += loss.detach().item()
+                reconstructed_patch.detach()
+                class_preds.detach()
+                del reconstructed_patch, class_preds
 
                 num_batches += 1
 
