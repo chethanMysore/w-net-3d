@@ -284,19 +284,19 @@ class Pipeline:
                     # soft_ncut_loss.backward()
                     self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
                     if self.clip_grads:
-                        # self.scaler.unscale_(self.optimizer)
+                        self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    # self.scaler.step(self.optimizer)
-                    # self.scaler.update()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
                 else:
                     soft_ncut_loss.backward(retain_graph=True)
                     if self.clip_grads:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    # self.optimizer.step()
+                    self.optimizer.step()
 
                 reconstruction_loss = 0
                 if not str(self.train_encoder_only).lower() == "true":
-                    # self.optimizer.zero_grad()
+                    self.optimizer.zero_grad()
 
                     with autocast(enabled=self.with_apex):
                         reconstructed_patch = self.model(local_batch, local_batch_mask, ops="dec")
