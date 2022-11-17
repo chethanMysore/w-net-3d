@@ -29,12 +29,12 @@ class ConvBlock(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
+            nn.PReLU(num_parameters=out_channels, init=0.25),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.LeakyReLU(),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
-            nn.BatchNorm3d(num_features=out_channels),
-            nn.LeakyReLU())
+            nn.PReLU(num_parameters=out_channels, init=0.25),
+            nn.BatchNorm3d(num_features=out_channels))
 
     def forward(self, x):
         x = self.conv(x)
@@ -53,14 +53,14 @@ class SeparableConvBlock(nn.Module):
                       bias=bias),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
+            nn.PReLU(num_parameters=out_channels, init=0.25),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.LeakyReLU(),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=1,
                       bias=bias),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
-            nn.BatchNorm3d(num_features=out_channels),
-            nn.LeakyReLU())
+            nn.PReLU(num_parameters=out_channels, init=0.25),
+            nn.BatchNorm3d(num_features=out_channels))
 
     def forward(self, x):
         x = self.conv(x)
@@ -80,7 +80,7 @@ class UpConv(nn.Module):
             nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding),
             nn.BatchNorm3d(num_features=out_channels),
-            nn.LeakyReLU())
+            nn.PReLU(num_parameters=out_channels, init=0.25))
 
     def forward(self, x):
         x = self.up(x)
@@ -223,14 +223,14 @@ class WNet3D(nn.Module):
 
     def forward(self, ip, ip_mask, ops="both"):
         encoder_op = self.Encoder(ip)
-        class_prob = self.activation(encoder_op)
-        class_prob_mask = ip_mask * class_prob
+        encoder_op_mask = ip_mask * encoder_op
+        class_prob = self.activation(encoder_op_mask)
         if ops == "enc":
-            return class_prob_mask.float()
-        reconstructed_op = self.Decoder(class_prob_mask)
+            return class_prob.float()
+        reconstructed_op = self.Decoder(class_prob)
         if ops == "dec":
             return reconstructed_op.float()
         if ops == "both":
-            return class_prob_mask.float(), reconstructed_op.float()
+            return class_prob.float(), reconstructed_op.float()
         else:
             raise ValueError('Invalid ops, ops must be in [enc, dec, both]')

@@ -279,7 +279,7 @@ class Pipeline:
                     if torch.any(torch.isnan(soft_ncut_loss)):
                         self.logger.info("Found nan in soft_ncut_loss")
                         continue
-                    soft_ncut_loss = self.s_ncut_loss_coeff * (soft_ncut_loss.sum() / local_batch.shape[0])
+                    soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
 
                 # Update only encoder by backpropagating soft-n-cut loss
                 if self.with_apex:
