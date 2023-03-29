@@ -171,7 +171,7 @@ class PerceptualLoss(torch.nn.Module):
             self.loss_func = MS_SSIM(reduction='mean').to(device)
         elif loss_type == "SSIM3D":
             self.loss_func = SSIM(
-                data_range=1, size_average=True, channel=1, spatial_dims=3).to(device)
+                data_range=1, size_average=True, channel=1, spatial_dims=3, win_size=65).to(device)
         elif loss_type == "SSIM2D":
             self.loss_func = SSIM(
                 data_range=1, size_average=True, channel=1, spatial_dims=2).to(device)
