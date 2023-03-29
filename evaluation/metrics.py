@@ -297,9 +297,9 @@ class SoftNCutsLoss(nn.Module):
 
 
 class ReconstructionLoss(nn.Module):
-    def __init__(self, recr_loss_model_path=None):
+    def __init__(self, recr_loss_model_path=None, loss_type="L1"):
         super(ReconstructionLoss, self).__init__()
-        self.loss = PerceptualLoss(loss_model="unet3Dds", model_load_path=recr_loss_model_path)
+        self.loss = PerceptualLoss(loss_model="unet3Dds", model_load_path=recr_loss_model_path, loss_type=loss_type)
 
     def forward(self, y_pred, y_true):
         return self.loss(y_pred, y_true)
