@@ -231,6 +231,9 @@ class Pipeline:
                         # Total Loss = SimilarityLoss + m*ContinuityLoss
                         loss = (self.sim_loss_coeff * similarity_loss) + (
                                 self.cont_loss_coeff * continuity_loss)
+                        reconstruction_loss = 0
+                        reg_loss = 0
+
                     else:
                         normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
@@ -414,6 +417,7 @@ class Pipeline:
                             # Total Loss = SimilarityLoss + m*ContinuityLoss
                             loss = (self.sim_loss_coeff * similarity_loss) + (
                                     self.cont_loss_coeff * continuity_loss)
+                            reconstruction_loss = 0
                         else:
                             normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask,
                                                                                  ops="both")
@@ -431,13 +435,10 @@ class Pipeline:
                                 reconstructed_patch,
                                 local_batch)
 
-                            # Compute Regularisation Loss
-                            reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
-
                             # Total Loss = m*(theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                             # beta*(reconstruction_loss) + alpha*(regularisation_loss)
                             loss = self.encoding_loss_coeff * ((self.sim_loss_coeff * similarity_loss) + (
-                                        self.cont_loss_coeff * continuity_loss)) + self.reconstr_loss_coeff * reconstruction_loss + self.reg_alpha * reg_loss
+                                    self.cont_loss_coeff * continuity_loss)) + self.reconstr_loss_coeff * reconstruction_loss
                         torch.cuda.empty_cache()
 
                 except Exception as error:
@@ -446,7 +447,7 @@ class Pipeline:
                 total_similarity_loss += similarity_loss.detach().item()
                 total_continuity_loss += continuity_loss.detach().item()
                 total_encoding_loss += (self.sim_loss_coeff * similarity_loss) + (
-                            self.cont_loss_coeff * continuity_loss)
+                        self.cont_loss_coeff * continuity_loss)
                 total_reconstr_loss += reconstruction_loss.detach().item()
                 total_loss += loss.detach().item()
 
@@ -484,7 +485,7 @@ class Pipeline:
         if self.wandb is not None:
             self.wandb.log(
                 {"EncodingLoss_val": total_encoding_loss, "ReconstructionLoss_val": total_reconstr_loss,
-                 "total_reg_loss_val": total_reg_loss, "similarity_loss_val": total_similarity_loss,
+                 "similarity_loss_val": total_similarity_loss,
                  "continuity_loss_val": total_continuity_loss, "total_loss_val": total_loss}, step=epoch)
 
         if self.LOWEST_LOSS > total_loss:  # Save best metric evaluation weights
