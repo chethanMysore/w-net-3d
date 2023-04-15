@@ -448,7 +448,10 @@ class Pipeline:
                 total_continuity_loss += continuity_loss.detach().item()
                 total_encoding_loss += (self.sim_loss_coeff * similarity_loss) + (
                         self.cont_loss_coeff * continuity_loss)
-                total_reconstr_loss += reconstruction_loss.detach().item()
+                try:
+                    total_reconstr_loss += reconstruction_loss.detach().item()
+                except Exception as detach_error:
+                    total_reconstr_loss += reconstruction_loss
                 total_loss += loss.detach().item()
 
                 # Log validation losses
