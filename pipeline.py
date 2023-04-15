@@ -379,9 +379,11 @@ class Pipeline:
                     total_reconstr_loss += reconstruction_loss
                     total_reg_loss += reg_loss
                 total_loss += loss.detach().item()
-                reconstructed_patch.detach()
+                if not str(self.train_encoder_only).lower() == "true":
+                    reconstructed_patch.detach()
+                    del reconstructed_patch
                 class_preds.detach()
-                del reconstructed_patch, class_preds
+                del class_preds
 
                 num_batches += 1
 
