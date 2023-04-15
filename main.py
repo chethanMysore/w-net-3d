@@ -136,6 +136,18 @@ if __name__ == '__main__':
                         type=float,
                         default=1.0,
                         help="loss coefficient for reconstruction loss")
+    parser.add_argument("-encoding_loss_coeff",
+                        type=float,
+                        default=1.0,
+                        help="loss coefficient for total encoding loss")
+    parser.add_argument("-sim_loss_coeff",
+                        type=float,
+                        default=1.0,
+                        help="coefficient for similarity loss")
+    parser.add_argument("-cont_loss_coeff",
+                        type=float,
+                        default=50,
+                        help="coefficient for continuity loss")
     parser.add_argument("-reg_alpha",
                         type=float,
                         default=0.001,
