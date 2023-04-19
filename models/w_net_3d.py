@@ -223,7 +223,7 @@ class WNet3D(nn.Module):
 
     def forward(self, ip, ip_mask=None, ops="both"):
         encoder_op = self.Encoder(ip)
-        if ip_mask:
+        if ip_mask is not None:
             encoder_op = ip_mask * encoder_op
         class_prob = self.activation(encoder_op)
         if ops == "enc":
