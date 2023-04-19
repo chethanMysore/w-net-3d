@@ -33,7 +33,9 @@ class Pipeline:
         self.model = model
         self.logger = logger
         self.learning_rate = cmd_args.learning_rate
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=cmd_args.learning_rate)
+        self.optimizer = torch.optim.RMSprop(model.parameters(), lr=cmd_args.learning_rate,
+                                             weight_decay=cmd_args.learning_rate*10.0,
+                                             momentum=cmd_args.learning_rate*100.0)
         self.num_epochs = cmd_args.num_epochs
         self.writer_training = writer_training
         self.writer_validating = writer_validating
