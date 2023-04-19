@@ -411,24 +411,24 @@ class Pipeline:
                     {"SoftNcutLoss_train": total_soft_ncut_loss, "ReconstructionLoss_train": total_reconstr_loss,
                      "total_reg_loss_train": total_reg_loss, "total_loss_train": total_loss}, step=epoch)
 
-            if self.with_apex:
-                save_model(self.CHECKPOINT_PATH, {
-                    'epoch_type': 'last',
-                    'epoch': epoch,
-                    # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
-                    'state_dict': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict(),
-                    'amp': self.scaler.state_dict()
-                })
-            else:
-                save_model(self.CHECKPOINT_PATH, {
-                    'epoch_type': 'last',
-                    'epoch': epoch,
-                    # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
-                    'state_dict': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict(),
-                    'amp': None
-                })
+            # if self.with_apex:
+            #     save_model(self.CHECKPOINT_PATH, {
+            #         'epoch_type': 'last',
+            #         'epoch': epoch,
+            #         # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
+            #         'state_dict': self.model.state_dict(),
+            #         'optimizer': self.optimizer.state_dict(),
+            #         'amp': self.scaler.state_dict()
+            #     })
+            # else:
+            #     save_model(self.CHECKPOINT_PATH, {
+            #         'epoch_type': 'last',
+            #         'epoch': epoch,
+            #         # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
+            #         'state_dict': self.model.state_dict(),
+            #         'optimizer': self.optimizer.state_dict(),
+            #         'amp': None
+            #     })
 
             torch.cuda.empty_cache()  # to avoid memory errors
             self.validate(training_batch_index, epoch)
