@@ -221,10 +221,11 @@ class WNet3D(nn.Module):
 
         self.activation = torch.nn.Softmax(dim=1)
 
-    def forward(self, ip, ip_mask, ops="both"):
+    def forward(self, ip, ip_mask=None, ops="both"):
         encoder_op = self.Encoder(ip)
-        encoder_op_mask = ip_mask * encoder_op
-        class_prob = self.activation(encoder_op_mask)
+        if ip_mask:
+            encoder_op = ip_mask * encoder_op
+        class_prob = self.activation(encoder_op)
         if ops == "enc":
             return class_prob
         reconstructed_op = self.Decoder(class_prob)
