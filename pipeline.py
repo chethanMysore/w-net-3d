@@ -536,7 +536,7 @@ class Pipeline:
                 torch.save(reconstructed_patch, os.path.join(result_root, subjectname + "_recr.pth"))
                 ignore, class_assignments = torch.max(class_assignments, 1)
                 print("class_assignments shape: {}".format(class_assignments.shape))
-                class_assignments = class_assignments.cpu().numpy().astype(np.uint16)
+                class_assignments = torch.reshape(class_assignments, (240, 240, 144)).cpu().numpy().astype(np.float32)
                 save_nifti(class_assignments, os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
                 # print("class_preds shape: {}".format(class_preds.shape))
                 # print("reconstructed_patch shape: {}".format(reconstructed_patch.shape))
