@@ -14,6 +14,7 @@ from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisa
 # from pytorch_msssim import ssim
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
+from utils.madam import Madam
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -32,8 +33,9 @@ class Pipeline:
         self.model = model
         self.logger = logger
         self.learning_rate = cmd_args.learning_rate
-        self.optimizer = torch.optim.RMSprop(model.parameters(), lr=cmd_args.learning_rate,
-                                             weight_decay=cmd_args.learning_rate*10, momentum=cmd_args.learning_rate*100)
+        # self.optimizer = torch.optim.RMSprop(model.parameters(), lr=cmd_args.learning_rate,
+        #                                      weight_decay=cmd_args.learning_rate*10, momentum=cmd_args.learning_rate*100)
+        self.optimizer = Madam(model.parameters(), lr=cmd_args.learning_rate)
         self.num_epochs = cmd_args.num_epochs
         self.writer_training = writer_training
         self.writer_validating = writer_validating
@@ -73,7 +75,8 @@ class Pipeline:
         self.soft_ncut_loss.cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
-        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path, loss_type="SSIM3D")
+        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
+                                                      loss_type="SSIM3D")
         self.reconstruction_loss.cuda()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
@@ -81,8 +84,7 @@ class Pipeline:
 
         self.LOWEST_LOSS = float('inf')
 
-        if self.with_apex:
-            self.scaler = GradScaler()
+        self.scaler = GradScaler()
 
         self.logger.info("Model Hyper Params: ")
         self.logger.info("\nLearning Rate: " + str(self.learning_rate))
@@ -280,23 +282,23 @@ class Pipeline:
                     if torch.any(torch.isnan(soft_ncut_loss)):
                         self.logger.info("Found nan in soft_ncut_loss")
                         continue
-                    soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
+                    soft_ncut_loss = soft_ncut_loss.mean()
 
                 # Update only encoder by backpropagating soft-n-cut loss
-                if self.with_apex:
-                    # soft_ncut_loss.backward()
-                    self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
-                    if self.clip_grads:
-                        self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    soft_ncut_loss.backward(retain_graph=True)
-                    if self.clip_grads:
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.optimizer.step()
-
+                # if self.with_apex:
+                # soft_ncut_loss.backward()
+                self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
+                if self.clip_grads:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                # else:
+                #     soft_ncut_loss.backward(retain_graph=True)
+                #     if self.clip_grads:
+                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                #     self.optimizer.step()
+                loss = soft_ncut_loss
                 reconstruction_loss = 0
                 reg_loss = 0
                 if not str(self.train_encoder_only).lower() == "true":
@@ -305,27 +307,26 @@ class Pipeline:
                     with autocast(enabled=self.with_apex):
                         reconstructed_patch = self.model(local_batch, local_batch_mask, ops="dec")
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
-                                                                                                  local_batch)
+                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
                         reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
-                        recr_reg_loss = reconstruction_loss + reg_loss
+                        loss_sum = soft_ncut_loss + reconstruction_loss
+                        loss = self.s_ncut_loss_coeff * (soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
+                                reconstruction_loss / loss_sum) + 0.1 * reg_loss
 
                     # Update the WNet by backpropagating reconstruction_loss
-                    if self.with_apex:
-                        # reconstruction_loss.backward()
-                        self.scaler.scale(recr_reg_loss).backward()
-                        if self.clip_grads:
-                            self.scaler.unscale_(self.optimizer)
-                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                        self.scaler.step(self.optimizer)
-                        self.scaler.update()
-                    else:
-                        recr_reg_loss.backward()
-                        if self.clip_grads:
-                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                        self.optimizer.step()
-
-                loss = soft_ncut_loss + reconstruction_loss + reg_loss
+                    # if self.with_apex:
+                    # reconstruction_loss.backward()
+                    self.scaler.scale(loss).backward()
+                    if self.clip_grads:
+                        self.scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    # else:
+                    #     recr_reg_loss.backward()
+                    #     if self.clip_grads:
+                    #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                    #     self.optimizer.step()
                 torch.cuda.empty_cache()
 
                 # except Exception as error:
@@ -463,8 +464,8 @@ class Pipeline:
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
                                                      num_samples=(self.samples_per_epoch // num_subjects) * 40)
             data_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=0,
-                                                               sampler=sampler)
+                                                      shuffle=False, num_workers=0,
+                                                      sampler=sampler)
         writer = self.writer_validating
         with torch.no_grad():
             for index, patches_batch in enumerate(tqdm(data_loader)):
@@ -483,13 +484,15 @@ class Pipeline:
                         if torch.any(torch.isnan(soft_ncut_loss)):
                             self.logger.info("Found nan in soft_ncut_loss")
                             continue
-                        soft_ncut_loss = self.s_ncut_loss_coeff * (soft_ncut_loss.sum() / local_batch.shape[0])
+                        soft_ncut_loss = (soft_ncut_loss.sum() / local_batch.shape[0])
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
-                                                                                                  local_batch)
+                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
 
                         if not str(self.train_encoder_only).lower() == "true":
-                            loss = soft_ncut_loss + reconstruction_loss
+                            loss_sum = soft_ncut_loss + reconstruction_loss
+                            loss = loss = self.s_ncut_loss_coeff * (
+                                        soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
+                                                  reconstruction_loss / loss_sum)
                         else:
                             loss = soft_ncut_loss
                         torch.cuda.empty_cache()
