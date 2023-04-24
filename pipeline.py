@@ -195,7 +195,7 @@ class Pipeline:
     def combine_losses(losses, weights):
         combined_loss = torch.Tensor([0.0]).float().cuda()
         for loss, wt in zip(losses, weights):
-            combined_loss = combined_loss + ((loss * wt) / loss)
+            combined_loss = combined_loss + wt * (loss / sum(losses))
 
         return combined_loss
 
@@ -259,7 +259,7 @@ class Pipeline:
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
 
                         # Compute Regularisation Loss
-                        reg_loss = l2_regularisation_loss(self.model)
+                        reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
 
                         # Total Loss = m*(theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                         # beta*(reconstruction_loss) + alpha*(regularisation_loss)
@@ -270,7 +270,7 @@ class Pipeline:
                         loss = Pipeline.combine_losses([similarity_loss, continuity_loss, reconstruction_loss, reg_loss]
                                                        , [self.sim_loss_coeff * self.encoding_loss_coeff,
                                                           self.cont_loss_coeff * self.encoding_loss_coeff,
-                                                          self.reconstr_loss_coeff, self.reg_alpha])
+                                                          self.reconstr_loss_coeff, 1.0])
 
                 self.scaler.scale(loss).backward()
                 # if self.with_apex:
