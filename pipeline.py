@@ -15,6 +15,7 @@ from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisa
 # from pytorch_msssim import ssim
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
+from utils.madam import Madam
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -33,9 +34,10 @@ class Pipeline:
         self.model = model
         self.logger = logger
         self.learning_rate = cmd_args.learning_rate
-        self.optimizer = torch.optim.RMSprop(model.parameters(), lr=cmd_args.learning_rate,
-                                             weight_decay=cmd_args.learning_rate*10.0,
-                                             momentum=cmd_args.learning_rate*100.0)
+        # self.optimizer = torch.optim.RMSprop(model.parameters(), lr=cmd_args.learning_rate,
+        #                                      weight_decay=cmd_args.learning_rate*10.0,
+        #                                      momentum=cmd_args.learning_rate*100.0)
+        self.optimizer = Madam(model.parameters(), lr=cmd_args.learning_rate)
         self.num_epochs = cmd_args.num_epochs
         self.writer_training = writer_training
         self.writer_validating = writer_validating
@@ -89,9 +91,7 @@ class Pipeline:
 
         self.LOWEST_LOSS = float('inf')
 
-        if self.with_apex:
-            self.scaler = GradScaler()
-
+        self.scaler = GradScaler()
         self.logger.info("Model Hyper Params: ")
         self.logger.info("\nLearning Rate: " + str(self.learning_rate))
         self.logger.info("\nNumber of Convolutional Blocks: " + str(cmd_args.num_conv))
@@ -225,10 +225,10 @@ class Pipeline:
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                         # Compute Similarity Loss
-                        similarity_loss = self.similarity_loss(normalised_res_map, class_assignments)
+                        similarity_loss = self.scaler.scale(self.similarity_loss(normalised_res_map, class_assignments))
 
                         # Compute Continuity Loss
-                        continuity_loss = self.continuity_loss(normalised_res_map)
+                        continuity_loss = self.scaler.scale(self.continuity_loss(normalised_res_map))
 
                         # Total Loss = SimilarityLoss + m*ContinuityLoss
                         loss = (self.sim_loss_coeff * similarity_loss) + (
@@ -241,18 +241,18 @@ class Pipeline:
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                         # Compute Similarity Loss
-                        similarity_loss = self.similarity_loss(normalised_res_map, class_assignments)
+                        similarity_loss = self.scaler.scale(self.similarity_loss(normalised_res_map, class_assignments))
 
                         # Compute Continuity Loss
-                        continuity_loss = self.continuity_loss(normalised_res_map)
+                        continuity_loss = self.scaler.scale(self.continuity_loss(normalised_res_map))
 
                         # Compute Reconstruction Loss
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
-                                                                                                  local_batch)
+                        reconstruction_loss = self.scaler.scale(self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
+                                                                                                  local_batch))
 
                         # Compute Regularisation Loss
-                        reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
+                        reg_loss = self.scaler.scale(self.reg_alpha * l2_regularisation_loss(self.model))
 
                         # Total Loss = m*(theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                         # beta*(reconstruction_loss) + alpha*(regularisation_loss)
@@ -261,18 +261,18 @@ class Pipeline:
                                self.reconstr_loss_coeff * reconstruction_loss + \
                                self.reg_alpha * reg_loss
 
-                if self.with_apex:
-                    self.scaler.scale(loss).backward()
-                    if self.clip_grads:
-                        self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    loss.backward()
-                    if self.clip_grads:
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.optimizer.step()
+                loss.backward()
+                #if self.with_apex:
+                    # self.scaler.scale(loss).backward()
+                if self.clip_grads:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                # else:
+                #     if self.clip_grads:
+                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                # self.optimizer.step()
 
                 # To avoid memory errors
                 torch.cuda.empty_cache()
@@ -411,10 +411,10 @@ class Pipeline:
                             ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                             # Compute Similarity Loss
-                            similarity_loss = self.similarity_loss(normalised_res_map, class_assignments)
+                            similarity_loss = self.scaler.scale(self.similarity_loss(normalised_res_map, class_assignments))
 
                             # Compute Continuity Loss
-                            continuity_loss = self.continuity_loss(normalised_res_map)
+                            continuity_loss = self.scaler.scale(self.continuity_loss(normalised_res_map))
 
                             # Total Loss = SimilarityLoss + m*ContinuityLoss
                             loss = (self.sim_loss_coeff * similarity_loss) + (
@@ -426,16 +426,16 @@ class Pipeline:
                             ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                             # Compute Similarity Loss
-                            similarity_loss = self.similarity_loss(normalised_res_map, class_assignments)
+                            similarity_loss = self.scaler.scale(self.similarity_loss(normalised_res_map, class_assignments))
 
                             # Compute Continuity Loss
-                            continuity_loss = self.continuity_loss(normalised_res_map)
+                            continuity_loss = self.scaler.scale(self.continuity_loss(normalised_res_map))
 
                             # Compute Reconstruction Loss
                             reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                            reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(
+                            reconstruction_loss = self.scaler.scale(self.reconstr_loss_coeff * self.reconstruction_loss(
                                 reconstructed_patch,
-                                local_batch)
+                                local_batch))
 
                             # Total Loss = m*(theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                             # beta*(reconstruction_loss) + alpha*(regularisation_loss)
