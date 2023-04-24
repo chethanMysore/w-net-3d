@@ -193,9 +193,9 @@ class Pipeline:
 
     @staticmethod
     def combine_losses(losses, weights):
-        combined_loss = torch.Tensor([0])
+        combined_loss = torch.Tensor([0.0]).float().cuda()
         for loss, wt in zip(losses, weights):
-            combined_loss = combined_loss + ((loss * wt) / loss.item())
+            combined_loss = combined_loss + ((loss * wt) / loss)
 
         return combined_loss
 
