@@ -79,7 +79,7 @@ if __name__ == '__main__':
                         action="store_true",
                         help="To use deformation for training")
     parser.add_argument('-apex',
-                        default=True,
+                        default=False,
                         help="To use half precision on model weights.")
     parser.add_argument("-num_conv",
                         type=int,
