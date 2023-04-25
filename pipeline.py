@@ -311,7 +311,7 @@ class Pipeline:
                         reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
                         loss_sum = soft_ncut_loss + reconstruction_loss
                         loss = self.s_ncut_loss_coeff * (soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
-                                reconstruction_loss / loss_sum) + 0.1 * reg_loss
+                                reconstruction_loss / loss_sum)
 
                     # Update the WNet by backpropagating reconstruction_loss
                     # if self.with_apex:
