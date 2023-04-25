@@ -308,10 +308,12 @@ class Pipeline:
                         reconstructed_patch = self.model(local_batch, local_batch_mask, ops="dec")
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
-                        reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
-                        loss_sum = soft_ncut_loss + reconstruction_loss
-                        loss = self.s_ncut_loss_coeff * (soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
-                                reconstruction_loss / loss_sum)
+                        reg_loss = l2_regularisation_loss(self.model)
+                        loss = self.s_ncut_loss_coeff * soft_ncut_loss + \
+                            self.reconstr_loss_coeff * reconstruction_loss + self.reg_alpha * reg_loss
+                        # loss_sum = soft_ncut_loss + reconstruction_loss
+                        # loss = self.s_ncut_loss_coeff * (soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
+                        #         reconstruction_loss / loss_sum)
 
                     # Update the WNet by backpropagating reconstruction_loss
                     # if self.with_apex:
@@ -489,10 +491,12 @@ class Pipeline:
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
 
                         if not str(self.train_encoder_only).lower() == "true":
-                            loss_sum = soft_ncut_loss + reconstruction_loss
-                            loss = loss = self.s_ncut_loss_coeff * (
-                                        soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
-                                                  reconstruction_loss / loss_sum)
+                            loss = self.s_ncut_loss_coeff * soft_ncut_loss + \
+                                self.reconstr_loss_coeff * reconstruction_loss
+                            # loss_sum = soft_ncut_loss + reconstruction_loss
+                            # loss = loss = self.s_ncut_loss_coeff * (
+                            #         soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
+                            #                       reconstruction_loss / loss_sum)
                         else:
                             loss = soft_ncut_loss
                         torch.cuda.empty_cache()
