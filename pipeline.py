@@ -278,7 +278,7 @@ class Pipeline:
                         loss = self.sim_loss_coeff * self.encoding_loss_coeff * (
                                 similarity_loss / loss_sum) + self.cont_loss_coeff * self.encoding_loss_coeff * (
                                        continuity_loss / loss_sum) + self.reconstr_loss_coeff * (
-                                       reconstruction_loss / loss_sum) + 0.1 * reg_loss
+                                       reconstruction_loss / loss_sum)
 
                 self.scaler.scale(loss).backward()
                 # if self.with_apex:
