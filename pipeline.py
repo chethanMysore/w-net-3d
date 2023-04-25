@@ -239,11 +239,12 @@ class Pipeline:
                         continuity_loss = self.continuity_loss(normalised_res_map)
 
                         # Total Loss = SimilarityLoss + m*ContinuityLoss
+                        loss = self.sim_loss_coeff * similarity_loss + self.cont_loss_coeff * continuity_loss
                         # loss = Pipeline.combine_losses([similarity_loss, continuity_loss],
                         #                                [self.sim_loss_coeff, self.cont_loss_coeff])
-                        loss_sum = similarity_loss + continuity_loss
-                        loss = self.sim_loss_coeff * (similarity_loss / loss_sum) + self.cont_loss_coeff * (
-                                    continuity_loss / loss_sum)
+                        # loss_sum = similarity_loss + continuity_loss
+                        # loss = self.sim_loss_coeff * (similarity_loss / loss_sum) + self.cont_loss_coeff * (
+                        #         continuity_loss / loss_sum)
                         reconstruction_loss = 0
                         reg_loss = 0
 
@@ -262,23 +263,23 @@ class Pipeline:
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
 
                         # Compute Regularisation Loss
-                        reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
+                        reg_loss = l2_regularisation_loss(self.model)
 
                         # Total Loss = m*(theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                         # beta*(reconstruction_loss) + alpha*(regularisation_loss)
-                        # loss = self.encoding_loss_coeff * ((self.sim_loss_coeff * similarity_loss) +
-                        #                                    (self.cont_loss_coeff * continuity_loss)) + \
-                        #        self.reconstr_loss_coeff * reconstruction_loss + \
-                        #        self.reg_alpha * reg_loss
+                        loss = self.encoding_loss_coeff * ((self.sim_loss_coeff * similarity_loss) +
+                                                           (self.cont_loss_coeff * continuity_loss)) + \
+                               self.reconstr_loss_coeff * reconstruction_loss + \
+                               self.reg_alpha * reg_loss
                         # loss = Pipeline.combine_losses([similarity_loss, continuity_loss, reconstruction_loss, reg_loss]
                         #                                , [self.sim_loss_coeff * self.encoding_loss_coeff,
                         #                                   self.cont_loss_coeff * self.encoding_loss_coeff,
                         #                                   self.reconstr_loss_coeff, 1.0])
-                        loss_sum = similarity_loss + continuity_loss + reconstruction_loss
-                        loss = self.sim_loss_coeff * self.encoding_loss_coeff * (
-                                similarity_loss / loss_sum) + self.cont_loss_coeff * self.encoding_loss_coeff * (
-                                       continuity_loss / loss_sum) + self.reconstr_loss_coeff * (
-                                       reconstruction_loss / loss_sum)
+                        # loss_sum = similarity_loss + continuity_loss + reconstruction_loss
+                        # loss = self.sim_loss_coeff * self.encoding_loss_coeff * (
+                        #         similarity_loss / loss_sum) + self.cont_loss_coeff * self.encoding_loss_coeff * (
+                        #                continuity_loss / loss_sum) + self.reconstr_loss_coeff * (
+                        #                reconstruction_loss / loss_sum)
 
                 self.scaler.scale(loss).backward()
                 # if self.with_apex:
@@ -436,8 +437,9 @@ class Pipeline:
                             continuity_loss = self.continuity_loss(normalised_res_map)
 
                             # Total Loss = SimilarityLoss + m*ContinuityLoss
-                            loss = Pipeline.combine_losses([similarity_loss, continuity_loss],
-                                                           [self.sim_loss_coeff, self.cont_loss_coeff])
+                            loss = self.sim_loss_coeff * similarity_loss + self.cont_loss_coeff * continuity_loss
+                            # loss = Pipeline.combine_losses([similarity_loss, continuity_loss],
+                            #                                [self.sim_loss_coeff, self.cont_loss_coeff])
                             reconstruction_loss = 0
                         else:
                             normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask,
@@ -456,11 +458,14 @@ class Pipeline:
 
                             # Total Loss = m*(theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                             # beta*(reconstruction_loss) + alpha*(regularisation_loss)
-                            loss_sum = similarity_loss + continuity_loss + reconstruction_loss
-                            loss = self.sim_loss_coeff * self.encoding_loss_coeff * (
-                                    similarity_loss / loss_sum) + self.cont_loss_coeff * self.encoding_loss_coeff * (
-                                           continuity_loss / loss_sum) + self.reconstr_loss_coeff * (
-                                           reconstruction_loss / loss_sum)
+                            loss = self.encoding_loss_coeff * (
+                                    self.sim_loss_coeff * similarity_loss + self.cont_loss_coeff * continuity_loss) + \
+                                   self.reconstr_loss_coeff * reconstruction_loss
+                            # loss_sum = similarity_loss + continuity_loss + reconstruction_loss
+                            # loss = self.sim_loss_coeff * self.encoding_loss_coeff * (
+                            #         similarity_loss / loss_sum) + self.cont_loss_coeff * self.encoding_loss_coeff * (
+                            #                continuity_loss / loss_sum) + self.reconstr_loss_coeff * (
+                            #                reconstruction_loss / loss_sum)
                         torch.cuda.empty_cache()
 
                 except Exception as error:
