@@ -228,6 +228,10 @@ class Pipeline:
                 loss = soft_ncut_loss
 
                 if not str(self.train_encoder_only).lower() == "true":
+                    # To avoid memory errors
+                    torch.cuda.empty_cache()
+
+                    # clear gradients
                     self.optimizer.zero_grad()
 
                     with autocast(enabled=self.with_apex):
