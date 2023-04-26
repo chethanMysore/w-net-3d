@@ -76,7 +76,7 @@ class Pipeline:
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
         self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
-                                                      loss_type="SSIM3D")
+                                                      loss_type="L1")
         self.reconstruction_loss.cuda()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
@@ -210,94 +210,21 @@ class Pipeline:
 
                 # Clear gradients
                 self.optimizer.zero_grad()
-                # with autocast(enabled=self.with_apex):
-                #     class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
-                #     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                #     if torch.any(torch.isnan(soft_ncut_loss)):
-                #         self.logger.info("Found nan in soft_ncut_loss")
-                #         continue
-                #     soft_ncut_loss = self.s_ncut_loss_coeff * (soft_ncut_loss.sum() / local_batch.shape[0])
-                #     reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                #     reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
-                #                                                                               local_batch)
-                #
-                # # Update only encoder by backpropagating soft-n-cut loss
-                # if self.with_apex:
-                #     if type(soft_ncut_loss) is list:
-                #         for i in range(len(soft_ncut_loss)):
-                #             if i + 1 == len(soft_ncut_loss):  # final loss
-                #                 # self.scaler.scale(soft_ncut_loss[i]).backward()
-                #                 soft_ncut_loss[i].backward()
-                #             else:
-                #                 # self.scaler.scale(soft_ncut_loss[i]).backward(retain_graph=True)
-                #                 soft_ncut_loss[i].backward(retain_graph=True)
-                #         soft_ncut_loss = torch.sum(torch.stack(soft_ncut_loss))
-                #     else:
-                #         # self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
-                #         soft_ncut_loss.backward(retain_graph=True)
-                #     # soft_ncut_loss.backward()
-                #     # if self.clip_grads:
-                #     #     # self.scaler.unscale_(self.optimizer)
-                #     #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #     # self.scaler.step(self.optimizer)
-                #     # self.scaler.update()
-                #     # self.optimizer.step()
-                # else:
-                #     soft_ncut_loss.backward(retain_graph=True)
-                #     # if self.clip_grads:
-                #     #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #     # self.optimizer.step()
-                #
-                # # Update the WNet by backpropagating reconstruction_loss
-                # if self.with_apex:
-                #     if type(reconstruction_loss) is list:
-                #         for i in range(len(reconstruction_loss)):
-                #             if i + 1 == len(reconstruction_loss):  # final loss
-                #                 # self.scaler.scale(reconstruction_loss[i]).backward()
-                #                 reconstruction_loss[i].backward()
-                #             else:
-                #                 # self.scaler.scale(reconstruction_loss[i]).backward(retain_graph=True)
-                #                 reconstruction_loss[i].backward(retain_graph=True)
-                #         reconstruction_loss = torch.sum(torch.stack(reconstruction_loss))
-                #     else:
-                #         # self.scaler.scale(reconstruction_loss).backward()
-                #         reconstruction_loss.backward()
-                #     # reconstruction_loss.backward()
-                #     if self.clip_grads:
-                #         # self.scaler.unscale_(self.optimizer)
-                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #     # self.scaler.step(self.optimizer)
-                #     # self.scaler.update()
-                #     self.optimizer.step()
-                # else:
-                #     reconstruction_loss.backward()
-                #     if self.clip_grads:
-                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #     self.optimizer.step()
-                # try:
+
                 with autocast(enabled=self.with_apex):
                     # Get the classification response map(normalized) and respective class assignments after argmax
                     class_preds = self.model(local_batch, local_batch_mask, ops="enc")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                    if torch.any(torch.isnan(soft_ncut_loss)):
-                        self.logger.info("Found nan in soft_ncut_loss")
-                        continue
                     soft_ncut_loss = soft_ncut_loss.mean()
 
                 # Update only encoder by backpropagating soft-n-cut loss
-                # if self.with_apex:
-                # soft_ncut_loss.backward()
                 self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
                 if self.clip_grads:
                     self.scaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
-                # else:
-                #     soft_ncut_loss.backward(retain_graph=True)
-                #     if self.clip_grads:
-                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #     self.optimizer.step()
+
                 loss = soft_ncut_loss
                 reconstruction_loss = 0
                 reg_loss = 0
@@ -309,69 +236,25 @@ class Pipeline:
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
                         reg_loss = l2_regularisation_loss(self.model)
-                        loss = self.s_ncut_loss_coeff * soft_ncut_loss + \
-                            self.reconstr_loss_coeff * reconstruction_loss + self.reg_alpha * reg_loss
-                        # loss_sum = soft_ncut_loss + reconstruction_loss
-                        # loss = self.s_ncut_loss_coeff * (soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
-                        #         reconstruction_loss / loss_sum)
+                        recr_reg_loss = reconstruction_loss + self.reg_alpha * reg_loss
 
                     # Update the WNet by backpropagating reconstruction_loss
                     # if self.with_apex:
                     # reconstruction_loss.backward()
-                    self.scaler.scale(loss).backward()
+                    self.scaler.scale(recr_reg_loss).backward()
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
-                    # else:
-                    #     recr_reg_loss.backward()
-                    #     if self.clip_grads:
-                    #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    #     self.optimizer.step()
-                torch.cuda.empty_cache()
 
-                # except Exception as error:
-                #     self.logger.exception(error)
-                #     sys.exit()
+                loss += reconstruction_loss + self.reg_alpha * reg_loss
+                torch.cuda.empty_cache()
 
                 self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
                                  "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
                                  str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
 
-                # # Calculating gradients
-                # if self.with_apex:
-                #     if type(loss) is list:
-                #         for i in range(len(loss)):
-                #             if i + 1 == len(loss):  # final loss
-                #                 self.scaler.scale(loss[i]).backward()
-                #             else:
-                #                 self.scaler.scale(loss[i]).backward(retain_graph=True)
-                #         loss = torch.sum(torch.stack(loss))
-                #     else:
-                #         # self.scaler.scale(loss).backward()
-                #         loss.backward()
-                #
-                #     if self.clip_grads:
-                #         # self.scaler.unscale_(self.optimizer)
-                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #         # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
-                #     self.optimizer.step()
-                #     # self.scaler.step(self.optimizer)
-                #     # self.scaler.update()
-                # else:
-                #     loss.backward()
-                #     if self.clip_grads:
-                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #         # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
-                #
-                #     self.optimizer.step()
-
-                # if training_batch_index % 50 == 0:  # Save best metric evaluation weights
-                #     write_summary(writer=self.writer_training, index=training_batch_index,
-                #                   similarity_loss=similarity_loss.detach().item(),
-                #                   continuity_loss=avg_continuity_loss.detach().item(),
-                #                   total_loss=loss.detach().item())
                 training_batch_index += 1
 
                 # Initialising the average loss metrics
@@ -483,20 +366,12 @@ class Pipeline:
                         # Get the classification response map(normalized) and respective class assignments after argmax
                         class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                        if torch.any(torch.isnan(soft_ncut_loss)):
-                            self.logger.info("Found nan in soft_ncut_loss")
-                            continue
                         soft_ncut_loss = (soft_ncut_loss.sum() / local_batch.shape[0])
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
 
                         if not str(self.train_encoder_only).lower() == "true":
-                            loss = self.s_ncut_loss_coeff * soft_ncut_loss + \
-                                self.reconstr_loss_coeff * reconstruction_loss
-                            # loss_sum = soft_ncut_loss + reconstruction_loss
-                            # loss = loss = self.s_ncut_loss_coeff * (
-                            #         soft_ncut_loss / loss_sum) + self.reconstr_loss_coeff * (
-                            #                       reconstruction_loss / loss_sum)
+                            loss = soft_ncut_loss + reconstruction_loss
                         else:
                             loss = soft_ncut_loss
                         torch.cuda.empty_cache()
