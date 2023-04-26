@@ -226,8 +226,7 @@ class Pipeline:
                 self.scaler.update()
 
                 loss = soft_ncut_loss
-                reconstruction_loss = 0
-                reg_loss = 0
+
                 if not str(self.train_encoder_only).lower() == "true":
                     self.optimizer.zero_grad()
 
@@ -239,8 +238,6 @@ class Pipeline:
                         recr_reg_loss = reconstruction_loss + self.reg_alpha * reg_loss
 
                     # Update the WNet by backpropagating reconstruction_loss
-                    # if self.with_apex:
-                    # reconstruction_loss.backward()
                     self.scaler.scale(recr_reg_loss).backward()
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
@@ -248,12 +245,9 @@ class Pipeline:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
 
-                loss += reconstruction_loss + self.reg_alpha * reg_loss
+                    loss += reconstruction_loss + self.reg_alpha * reg_loss
                 torch.cuda.empty_cache()
 
-                self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
-                                 "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
-                                 str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
 
                 training_batch_index += 1
 
@@ -263,8 +257,12 @@ class Pipeline:
                     total_reconstr_loss += reconstruction_loss.detach().item()
                     total_reg_loss += reg_loss.detach().item()
                 except Exception as detach_error:
-                    total_reconstr_loss += reconstruction_loss
-                    total_reg_loss += reg_loss
+                    if reconstruction_loss:
+                        total_reconstr_loss += reconstruction_loss
+                        total_reg_loss += reg_loss
+                    else:
+                        reconstruction_loss = 0
+                        reg_loss = 0
                 total_loss += loss.detach().item()
                 if not str(self.train_encoder_only).lower() == "true":
                     reconstructed_patch.detach()
@@ -274,6 +272,9 @@ class Pipeline:
 
                 num_batches += 1
 
+                self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
+                                 "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
+                                 str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
                 # To avoid memory errors
                 torch.cuda.empty_cache()
 
