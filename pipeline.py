@@ -239,8 +239,6 @@ class Pipeline:
                     # Total Loss = SimilarityLoss + m*ContinuityLoss
                     loss = self.sim_loss_coeff * similarity_loss + self.cont_loss_coeff * continuity_loss
 
-
-
                     # Update Encoder Only
                     self.scaler.scale(loss).backward()
                     if self.clip_grads:
@@ -279,15 +277,6 @@ class Pipeline:
                 # To avoid memory errors
                 torch.cuda.empty_cache()
 
-                # except Exception as error:
-                #     self.logger.exception(error)
-                #     sys.exit()
-
-                self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
-                                 "\n SimilarityLoss: " + str(similarity_loss) + " ContinuityLoss: " + str(
-                    continuity_loss) + " ReconstructionLoss: " +
-                                 str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
-
                 training_batch_index += 1
 
                 # Initialising the average loss metrics
@@ -301,6 +290,9 @@ class Pipeline:
                     if reconstruction_loss:
                         total_reconstr_loss += reconstruction_loss
                         total_reg_loss += reg_loss
+                    else:
+                        reconstruction_loss = 0
+                        reg_loss = 0
 
                 total_loss += loss.detach().item()
                 if not str(self.train_encoder_only).lower() == "true":
@@ -311,6 +303,10 @@ class Pipeline:
 
                 num_batches += 1
 
+                self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
+                                 "\n SimilarityLoss: " + str(similarity_loss) + " ContinuityLoss: " + str(
+                    continuity_loss) + " ReconstructionLoss: " +
+                                 str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
                 # To avoid memory errors
                 torch.cuda.empty_cache()
 
