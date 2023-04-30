@@ -257,6 +257,7 @@ class Pipeline:
                     soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
                     reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
+                    reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
                     loss = soft_ncut_loss + reconstruction_loss
                     self.scaler.scale(loss).backward()
                     if self.clip_grads:
