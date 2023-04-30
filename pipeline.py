@@ -551,9 +551,9 @@ class Pipeline:
                 # ignore, class_assignments = torch.max(class_preds, 1)
                 # print("class_assignments shape: {}".format(class_assignments.shape))
                 # class_assignments = class_assignments.cpu().squeeze().numpy().astype(np.uint16)
-                # reconstructed_patch = reconstructed_patch.cpu().squeeze().numpy().astype(np.uint16)
+                reconstructed_patch = reconstructed_patch.cpu().squeeze().numpy().astype(np.float32)
                 # save_nifti(class_assignments, os.path.join(result_root, subjectname + "_WNET_v2_seg_vol.nii.gz"))
-                # save_nifti(reconstructed_patch, os.path.join(result_root, subjectname + "_WNET_v2_recr.nii.gz"))
+                save_nifti(reconstructed_patch, os.path.join(result_root, subjectname + "_recr.nii.gz"))
 
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
