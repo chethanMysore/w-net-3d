@@ -8,12 +8,14 @@ Purpose :
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.data
 # from torchmetrics.functional import structural_similarity_index_measure
 import numpy as np
 import torchio as tio
 # from pytorch_msssim import SSIM
 from .perceptual_loss import PerceptualLoss
+from scipy.stats import norm
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -234,9 +236,9 @@ class SoftNCutsLoss_v2(nn.Module):
         return soft_n_cut_loss
 
 
-class SoftNCutsLoss(nn.Module):
+class SoftNCutsLoss_v3(nn.Module):
     def __init__(self, radius=4, sigma_x=4, sigma_i=10, patch_size=32, n_channel=1):
-        super(SoftNCutsLoss, self).__init__()
+        super(SoftNCutsLoss_v3, self).__init__()
         self.radius = radius
         self.sigma_x = sigma_x
         self.sigma_i = sigma_i
@@ -294,6 +296,63 @@ class SoftNCutsLoss(nn.Module):
         loss = [self._cal_loss_for_k(weights, preds[:, (i,), :, :, :], batch_size) for i in range(k)]
         total_loss = torch.stack(loss)
         return k - torch.sum(total_loss, dim=0)
+
+
+class SoftNCutsLoss(nn.Module):
+    r"""Implementation of the continuous N-Cut loss, as in:
+    'W-Net: A Deep Model for Fully Unsupervised Image Segmentation', by Xia, Kulis (2017)"""
+
+    def __init__(self, radius=4, sigma_x=5, sigma_i=1):
+        r"""
+        :param radius: Radius of the spatial interaction term
+        :param sigma_1: Standard deviation of the spatial Gaussian interaction
+        :param sigma_2: Standard deviation of the pixel value Gaussian interaction
+        """
+        super(SoftNCutsLoss, self).__init__()
+        self.radius = radius
+        self.sigma_x = sigma_x  # Spatial standard deviation
+        self.sigma_i = sigma_i  # Pixel value standard deviation
+        self.kernel3d = SoftNCutsLoss.gaussian_kernel3d(radius, sigma_x)
+
+    @staticmethod
+    def gaussian_kernel3d(radius=3, sigma=4):
+        neighborhood_size = 2 * radius + 1
+        voxel_neighborhood = np.linspace(-radius, radius, neighborhood_size) ** 2
+        xy, yz, zx = np.meshgrid(voxel_neighborhood, voxel_neighborhood, voxel_neighborhood)
+        dist = (xy + yz + zx) / sigma
+        kernel = norm.pdf(dist) / norm.pdf(0)
+        kernel = torch.from_numpy(kernel.astype(np.float32))
+        kernel = kernel.view((1, 1, kernel.shape[0], kernel.shape[1], kernel.shape[2]))
+        kernel = kernel.cuda()
+        return kernel
+
+    def forward(self, inputs, labels):
+        r"""Computes the continuous N-Cut loss, given a set of class probabilities (labels) and raw images (inputs).
+        Small modifications have been made here for efficiency -- specifically, we compute the pixel-wise weights
+        relative to the class-wide average, rather than for every individual pixel.
+        :param labels: Predicted class probabilities
+        :param inputs: Raw images
+        :return: Continuous N-Cut loss
+        """
+        num_classes = labels.shape[1]
+        loss = 0
+
+        for k in range(num_classes):
+            # Compute the average pixel value for this class, and the difference from each pixel
+            class_probs = labels[:, k].unsqueeze(1)
+            class_mean = torch.mean(inputs * class_probs, dim=(2, 3, 4), keepdim=True) / \
+                torch.add(torch.mean(class_probs, dim=(2, 3, 4), keepdim=True), 1e-5)
+            diff = (inputs - class_mean).pow(2).sum(dim=1).unsqueeze(1)
+
+            # Weight the loss by the difference from the class average.
+            weights = torch.exp(diff.pow(2).mul(-1 / self.sigma_i ** 2))
+
+            # Compute N-cut loss, using the computed weights matrix, and a Gaussian spatial filter
+            numerator = torch.sum(class_probs * F.conv3d(class_probs * weights, self.kernel3d, padding=self.radius))
+            denominator = torch.sum(class_probs * F.conv3d(weights, self.kernel3d, padding=self.radius))
+            loss += nn.L1Loss()(numerator / torch.add(denominator, 1e-6), torch.zeros_like(numerator))
+
+        return num_classes - loss
 
 
 class ReconstructionLoss(nn.Module):
