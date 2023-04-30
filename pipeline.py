@@ -249,7 +249,7 @@ class Pipeline:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
 
-                    loss += reconstruction_loss + self.reg_alpha * reg_loss
+                    loss = soft_ncut_loss + reconstruction_loss + self.reg_alpha * reg_loss
                 torch.cuda.empty_cache()
 
 
