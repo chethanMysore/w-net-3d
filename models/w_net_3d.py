@@ -230,7 +230,7 @@ class WNet3D(nn.Module):
             return class_prob
         reconstructed_op = self.Decoder(class_prob)
         if ip_mask is not None:
-            reconstructed_op = ip_mask * reconstructed_op
+            reconstructed_op = torch.amax(ip_mask, dim=1, keepdim=True) * reconstructed_op
         if ops == "dec":
             return reconstructed_op
         if ops == "both":
