@@ -323,7 +323,7 @@ class SoftNCutsLoss(nn.Module):
         kernel = norm.pdf(dist) / norm.pdf(0)
         kernel = torch.from_numpy(kernel.astype(np.float32))
         kernel = kernel.view((1, 1, kernel.shape[0], kernel.shape[1], kernel.shape[2]))
-        kernel = kernel.cuda()
+        kernel = kernel
         return kernel
 
     def forward(self, inputs, labels):
@@ -336,6 +336,7 @@ class SoftNCutsLoss(nn.Module):
         """
         num_classes = labels.shape[1]
         loss = 0
+        kernel = self.kernel3d.clone().cuda()
 
         for k in range(num_classes):
             # Compute the average pixel value for this class, and the difference from each pixel
@@ -348,8 +349,8 @@ class SoftNCutsLoss(nn.Module):
             weights = torch.exp(diff.pow(2).mul(-1 / self.sigma_i ** 2))
 
             # Compute N-cut loss, using the computed weights matrix, and a Gaussian spatial filter
-            numerator = torch.sum(class_probs * F.conv3d(class_probs * weights, self.kernel3d, padding=self.radius))
-            denominator = torch.sum(class_probs * F.conv3d(weights, self.kernel3d, padding=self.radius))
+            numerator = torch.sum(class_probs * F.conv3d(class_probs * weights, kernel, padding=self.radius))
+            denominator = torch.sum(class_probs * F.conv3d(weights, kernel, padding=self.radius))
             loss += nn.L1Loss()(numerator / torch.add(denominator, 1e-6), torch.zeros_like(numerator))
 
         return num_classes - loss
