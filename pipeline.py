@@ -113,7 +113,7 @@ class Pipeline:
                                                                       stride_depth=self.stride_depth,
                                                                       is_train=False, num_worker=self.num_worker)
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
-                                                     num_samples=(self.samples_per_epoch // num_subjects) * 40)
+                                                     num_samples=(self.samples_per_epoch // num_subjects) * 60)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
                                                                shuffle=False, num_workers=0,
                                                                sampler=sampler)
@@ -225,54 +225,82 @@ class Pipeline:
                 # Clear gradients
                 self.optimizer.zero_grad()
 
+                # with autocast(enabled=self.with_apex):
+                #     # Get the classification response map(normalized) and respective class assignments after argmax
+                #     normalised_res_map = self.model(local_batch, local_batch_mask, ops="enc")
+                #     ignore, class_assignments = torch.max(normalised_res_map, 1)
+                #
+                #     # Compute Similarity Loss
+                #     similarity_loss = self.similarity_loss(normalised_res_map, class_assignments)
+                #
+                #     # Compute Continuity Loss
+                #     continuity_loss = self.continuity_loss(normalised_res_map)
+                #
+                #     # Total Loss = SimilarityLoss + m*ContinuityLoss
+                #     loss = self.sim_loss_coeff * similarity_loss + self.cont_loss_coeff * continuity_loss
+                #
+                #     # Update Encoder Only
+                #     self.scaler.scale(loss).backward()
+                #     if self.clip_grads:
+                #         self.scaler.unscale_(self.optimizer)
+                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                #     self.scaler.step(self.optimizer)
+                #     self.scaler.update()
+                #
+                #     if not str(self.train_encoder_only).lower() == "true":
+                #         # clear gradients
+                #         self.optimizer.zero_grad()
+                #
+                #         normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
+                #         ignore, class_assignments = torch.max(normalised_res_map, 1)
+                #
+                #         # Compute Reconstruction Loss
+                #         reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                #         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
+                #
+                #         # Compute Regularisation Loss
+                #         reg_loss = l2_regularisation_loss(self.model)
+                #
+                #         # Total Loss = # beta*(reconstruction_loss) + alpha*(regularisation_loss)
+                #         recr_reg_loss = reconstruction_loss + self.reg_alpha * reg_loss
+                #
+                #         # Update both encoder and decoder
+                #         self.scaler.scale(recr_reg_loss).backward()
+                #         if self.clip_grads:
+                #             self.scaler.unscale_(self.optimizer)
+                #             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                #         self.scaler.step(self.optimizer)
+                #         self.scaler.update()
+                #
+                #         loss += reconstruction_loss + self.reg_alpha * reg_loss
+
                 with autocast(enabled=self.with_apex):
-                    # Get the classification response map(normalized) and respective class assignments after argmax
-                    normalised_res_map = self.model(local_batch, local_batch_mask, ops="enc")
+                    normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                     ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                     # Compute Similarity Loss
-                    similarity_loss = self.similarity_loss(normalised_res_map, class_assignments)
+                    similarity_loss = self.sim_loss_coeff * self.similarity_loss(normalised_res_map, class_assignments)
 
                     # Compute Continuity Loss
-                    continuity_loss = self.continuity_loss(normalised_res_map)
+                    continuity_loss = self.cont_loss_coeff * self.continuity_loss(normalised_res_map)
 
-                    # Total Loss = SimilarityLoss + m*ContinuityLoss
-                    loss = self.sim_loss_coeff * similarity_loss + self.cont_loss_coeff * continuity_loss
+                    # Compute Reconstruction loss
+                    reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                    reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
 
-                    # Update Encoder Only
+                    # Compute Regularisation Loss
+                    reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
+
+                    # Total Loss = # beta*(reconstruction_loss) + alpha*(regularisation_loss)
+                    loss = similarity_loss + continuity_loss + reconstruction_loss + reg_loss
+
+                    # Update both encoder and decoder
                     self.scaler.scale(loss).backward()
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
-
-                    if not str(self.train_encoder_only).lower() == "true":
-                        # clear gradients
-                        self.optimizer.zero_grad()
-
-                        normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
-                        ignore, class_assignments = torch.max(normalised_res_map, 1)
-
-                        # Compute Reconstruction Loss
-                        reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
-
-                        # Compute Regularisation Loss
-                        reg_loss = l2_regularisation_loss(self.model)
-
-                        # Total Loss = # beta*(reconstruction_loss) + alpha*(regularisation_loss)
-                        recr_reg_loss = reconstruction_loss + self.reg_alpha * reg_loss
-
-                        # Update both encoder and decoder
-                        self.scaler.scale(recr_reg_loss).backward()
-                        if self.clip_grads:
-                            self.scaler.unscale_(self.optimizer)
-                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                        self.scaler.step(self.optimizer)
-                        self.scaler.update()
-
-                        loss += reconstruction_loss + self.reg_alpha * reg_loss
 
                 # To avoid memory errors
                 torch.cuda.empty_cache()
@@ -407,20 +435,20 @@ class Pipeline:
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                         # Compute Similarity Loss
-                        similarity_loss = self.similarity_loss(normalised_res_map, class_assignments)
+                        similarity_loss = self.sim_loss_coeff * self.similarity_loss(normalised_res_map, class_assignments)
 
                         # Compute Continuity Loss
-                        continuity_loss = self.continuity_loss(normalised_res_map)
+                        continuity_loss = self.cont_loss_coeff * self.continuity_loss(normalised_res_map)
 
                         # Compute Reconstruction Loss
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
+                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
 
                         # Total Loss = (theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                         # (reconstruction_loss) + alpha*(regularisation_loss)
-                        loss = self.sim_loss_coeff * similarity_loss + self.cont_loss_coeff * continuity_loss
-                        if not str(self.train_encoder_only).lower() == "true":
-                            loss += reconstruction_loss
+                        loss = similarity_loss + continuity_loss + reconstruction_loss
+                        # if not str(self.train_encoder_only).lower() == "true":
+                        #     loss += reconstruction_loss
                     torch.cuda.empty_cache()
 
                 except Exception as error:
