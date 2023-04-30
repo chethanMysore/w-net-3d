@@ -215,7 +215,6 @@ class Pipeline:
                     # Get the classification response map(normalized) and respective class assignments after argmax
                     class_preds = self.model(local_batch, local_batch_mask, ops="enc")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                    soft_ncut_loss = soft_ncut_loss.mean()
 
                 # Update only encoder by backpropagating soft-n-cut loss
                 self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
@@ -371,7 +370,6 @@ class Pipeline:
                         # Get the classification response map(normalized) and respective class assignments after argmax
                         class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                        soft_ncut_loss = (soft_ncut_loss.sum() / local_batch.shape[0])
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
 
