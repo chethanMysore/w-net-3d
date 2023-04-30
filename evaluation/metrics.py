@@ -312,7 +312,6 @@ class SoftNCutsLoss(nn.Module):
         self.radius = radius
         self.sigma_x = sigma_x  # Spatial standard deviation
         self.sigma_i = sigma_i  # Pixel value standard deviation
-        self.kernel3d = SoftNCutsLoss.gaussian_kernel3d(radius, sigma_x)
 
     def gaussian_kernel3d(self):
         neighborhood_size = 2 * self.radius + 1
