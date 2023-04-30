@@ -107,7 +107,7 @@ class Pipeline:
                                                                       stride_depth=self.stride_depth,
                                                                       is_train=False, num_worker=self.num_worker)
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
-                                                     num_samples=(self.samples_per_epoch // num_subjects) * 40)
+                                                     num_samples=(self.samples_per_epoch // num_subjects) * 60)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
                                                                shuffle=False, num_workers=0,
                                                                sampler=sampler)
@@ -211,45 +211,59 @@ class Pipeline:
                 # Clear gradients
                 self.optimizer.zero_grad()
 
+                # with autocast(enabled=self.with_apex):
+                #     # Get the classification response map(normalized) and respective class assignments after argmax
+                #     class_preds = self.model(local_batch, local_batch_mask, ops="enc")
+                #     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
+                #     soft_ncut_loss = soft_ncut_loss.mean()
+                #
+                # # Update only encoder by backpropagating soft-n-cut loss
+                # self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
+                # if self.clip_grads:
+                #     self.scaler.unscale_(self.optimizer)
+                #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                # self.scaler.step(self.optimizer)
+                # self.scaler.update()
+                #
+                # loss = soft_ncut_loss
+                #
+                # if not str(self.train_encoder_only).lower() == "true":
+                #     # To avoid memory errors
+                #     torch.cuda.empty_cache()
+                #
+                #     # clear gradients
+                #     self.optimizer.zero_grad()
+                #
+                #     with autocast(enabled=self.with_apex):
+                #         reconstructed_patch = self.model(local_batch, local_batch_mask, ops="dec")
+                #         reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                #         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
+                #         reg_loss = l2_regularisation_loss(self.model)
+                #         recr_reg_loss = reconstruction_loss + self.reg_alpha * reg_loss
+                #
+                #     # Update the WNet by backpropagating reconstruction_loss
+                #     self.scaler.scale(recr_reg_loss).backward()
+                #     if self.clip_grads:
+                #         self.scaler.unscale_(self.optimizer)
+                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                #     self.scaler.step(self.optimizer)
+                #     self.scaler.update()
+                #
+                #     loss = soft_ncut_loss + reconstruction_loss + self.reg_alpha * reg_loss
+
                 with autocast(enabled=self.with_apex):
-                    # Get the classification response map(normalized) and respective class assignments after argmax
-                    class_preds = self.model(local_batch, local_batch_mask, ops="enc")
+                    class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                    soft_ncut_loss = soft_ncut_loss.mean()
-
-                # Update only encoder by backpropagating soft-n-cut loss
-                self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
-                if self.clip_grads:
-                    self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-
-                loss = soft_ncut_loss
-
-                if not str(self.train_encoder_only).lower() == "true":
-                    # To avoid memory errors
-                    torch.cuda.empty_cache()
-
-                    # clear gradients
-                    self.optimizer.zero_grad()
-
-                    with autocast(enabled=self.with_apex):
-                        reconstructed_patch = self.model(local_batch, local_batch_mask, ops="dec")
-                        reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
-                        reg_loss = l2_regularisation_loss(self.model)
-                        recr_reg_loss = reconstruction_loss + self.reg_alpha * reg_loss
-
-                    # Update the WNet by backpropagating reconstruction_loss
-                    self.scaler.scale(recr_reg_loss).backward()
+                    soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
+                    reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                    reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
+                    loss = soft_ncut_loss + reconstruction_loss
+                    self.scaler.scale(loss).backward()
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
-
-                    loss = soft_ncut_loss + reconstruction_loss + self.reg_alpha * reg_loss
                 torch.cuda.empty_cache()
 
 
@@ -371,9 +385,9 @@ class Pipeline:
                         # Get the classification response map(normalized) and respective class assignments after argmax
                         class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                        soft_ncut_loss = soft_ncut_loss.mean()
+                        soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
+                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
 
                         if not str(self.train_encoder_only).lower() == "true":
                             loss = soft_ncut_loss + reconstruction_loss
@@ -414,8 +428,8 @@ class Pipeline:
             self.wandb.log({"SoftNcutLoss_val": total_soft_ncut_loss, "ReconstructionLoss_val": total_reconstr_loss,
                             "total_loss_val": total_loss}, step=epoch)
 
-        if self.LOWEST_LOSS > total_loss:  # Save best metric evaluation weights
-            self.LOWEST_LOSS = total_loss
+        if self.LOWEST_LOSS > total_soft_ncut_loss:  # Save best metric evaluation weights
+            self.LOWEST_LOSS = total_soft_ncut_loss
             self.logger.info(
                 'Best metric... @ epoch:' + str(training_index) + ' Current Lowest loss:' + str(self.LOWEST_LOSS))
 
@@ -456,8 +470,8 @@ class Pipeline:
                 torch.save(reconstructed_patch, os.path.join(result_root, subjectname + "_WNET_v2_recr.pth"))
                 ignore, class_assignments = torch.max(class_preds, 1)
                 print("class_assignments shape: {}".format(class_assignments.shape))
-                class_assignments = class_assignments.cpu().squeeze().numpy().astype(np.uint16)
-                reconstructed_patch = reconstructed_patch.cpu().squeeze().numpy().astype(np.uint16)
+                class_assignments = class_assignments.cpu().squeeze().numpy().astype(np.float32)
+                reconstructed_patch = reconstructed_patch.cpu().squeeze().numpy().astype(np.float32)
                 save_nifti(class_assignments, os.path.join(result_root, subjectname + "_WNET_v2_seg_vol.nii.gz"))
                 save_nifti(reconstructed_patch, os.path.join(result_root, subjectname + "_WNET_v2_recr.nii.gz"))
 

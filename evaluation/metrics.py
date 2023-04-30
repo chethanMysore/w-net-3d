@@ -314,16 +314,15 @@ class SoftNCutsLoss(nn.Module):
         self.sigma_i = sigma_i  # Pixel value standard deviation
         self.kernel3d = SoftNCutsLoss.gaussian_kernel3d(radius, sigma_x)
 
-    @staticmethod
-    def gaussian_kernel3d(radius=3, sigma=4):
-        neighborhood_size = 2 * radius + 1
-        voxel_neighborhood = np.linspace(-radius, radius, neighborhood_size) ** 2
+    def gaussian_kernel3d(self):
+        neighborhood_size = 2 * self.radius + 1
+        voxel_neighborhood = np.linspace(-self.radius, self.radius, neighborhood_size) ** 2
         xy, yz, zx = np.meshgrid(voxel_neighborhood, voxel_neighborhood, voxel_neighborhood)
-        dist = (xy + yz + zx) / sigma
+        dist = (xy + yz + zx) / self.sigma_x
         kernel = norm.pdf(dist) / norm.pdf(0)
         kernel = torch.from_numpy(kernel.astype(np.float32))
         kernel = kernel.view((1, 1, kernel.shape[0], kernel.shape[1], kernel.shape[2]))
-        kernel = kernel
+        kernel = kernel.cuda()
         return kernel
 
     def forward(self, inputs, labels):
@@ -336,7 +335,7 @@ class SoftNCutsLoss(nn.Module):
         """
         num_classes = labels.shape[1]
         loss = 0
-        kernel = self.kernel3d.clone().cuda()
+        kernel = self.gaussian_kernel3d()
 
         for k in range(num_classes):
             # Compute the average pixel value for this class, and the difference from each pixel
