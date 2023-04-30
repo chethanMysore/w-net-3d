@@ -467,14 +467,14 @@ class Pipeline:
                 reconstructed_patch = torch.sigmoid(reconstructed_patch)
                 print("class_preds shape: {}".format(class_preds.shape))
                 print("reconstructed_patch shape: {}".format(reconstructed_patch.shape))
-                torch.save(class_preds, os.path.join(result_root, subjectname + "_WNET_v2_class_preds.pth"))
-                torch.save(reconstructed_patch, os.path.join(result_root, subjectname + "_WNET_v2_recr.pth"))
+                torch.save(class_preds, os.path.join(result_root, subjectname + "_class_preds.pth"))
+                torch.save(reconstructed_patch, os.path.join(result_root, subjectname + "_recr.pth"))
                 ignore, class_assignments = torch.max(class_preds, 1)
                 print("class_assignments shape: {}".format(class_assignments.shape))
                 class_assignments = class_assignments.cpu().squeeze().numpy().astype(np.float32)
                 reconstructed_patch = reconstructed_patch.cpu().squeeze().numpy().astype(np.float32)
-                save_nifti(class_assignments, os.path.join(result_root, subjectname + "_WNET_v2_seg_vol.nii.gz"))
-                save_nifti(reconstructed_patch, os.path.join(result_root, subjectname + "_WNET_v2_recr.nii.gz"))
+                save_nifti(class_assignments, os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
+                save_nifti(reconstructed_patch, os.path.join(result_root, subjectname + "_recr.nii.gz"))
 
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
