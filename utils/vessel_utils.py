@@ -254,3 +254,29 @@ def show_diff(label, predicted, diff_image):
     ax[2].axis('off')
 
     plt.show()
+
+
+def unary_from_softmax(sm, scale=None, clip=1e-5):
+    """Converts softmax class-probabilities to unary potentials (NLL per node).
+    Parameters
+    ----------
+    sm: numpy.array
+        Output of a softmax where the first dimension is the classes,
+        all others will be flattend. This means `sm.shape[0] == n_classes`.
+    scale: float
+        The certainty of the softmax output (default is None).
+        If not None, the softmax outputs are scaled to range from uniform
+        probability for 0 outputs to `scale` probability for 1 outputs.
+    clip: float
+        Minimum value to which probability should be clipped.
+        This is because the unary is the negative log of the probability, and
+        log(0) = inf, so we need to clip 0 probabilities to a positive value.
+    """
+    num_cls = sm.shape[0]
+    if scale is not None:
+        assert 0 < scale <= 1, "`scale` needs to be in (0,1]"
+        uniform = np.ones(sm.shape) / num_cls
+        sm = scale * sm + (1 - scale) * uniform
+    if clip is not None:
+        sm = np.clip(sm, clip, 1.0)
+    return -np.log(sm).reshape([num_cls, -1]).astype(np.float32)

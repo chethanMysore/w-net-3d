@@ -16,6 +16,8 @@ from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisa
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
 from utils.madam import Madam
+from models.crf import CRF
+from utils.vessel_utils import unary_from_softmax
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -70,6 +72,10 @@ class Pipeline:
         self.reg_alpha = cmd_args.reg_alpha
         self.sim_loss_coeff = cmd_args.sim_loss_coeff
         self.cont_loss_coeff = cmd_args.cont_loss_coeff
+
+        # CRF
+        self.crf3d = torch.nn.DataParallel(CRF(num_iter=5, num_classes=cmd_args.num_classes))
+        self.crf3d.cuda()
 
         # Following metrics can be used to evaluate
         self.radius = cmd_args.radius
@@ -582,6 +588,8 @@ class Pipeline:
 
             with autocast(enabled=self.with_apex):
                 class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
+                # apply CRF
+                class_preds = self.crf3d(log_unary=class_preds, features_pairwise=local_batch)
                 ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
                 reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
@@ -591,6 +599,11 @@ class Pipeline:
 
         class_probs = aggregator1.get_output_tensor().squeeze().numpy()
         reconstructed_image = aggregator2.get_output_tensor().squeeze().numpy()
+
+        # to avoid memory errors
+        torch.cuda.empty_cache()
+
+
 
         save_nifti(class_probs, os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
         save_nifti(reconstructed_image, os.path.join(result_root, subjectname + "_recr.nii.gz"))
