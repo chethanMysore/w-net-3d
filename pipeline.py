@@ -583,8 +583,9 @@ class Pipeline:
             with autocast(enabled=self.with_apex):
                 class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                 ignore, class_assignments = torch.max(class_preds, 1)
-                reconstructed_patch = torch.sigmoid(reconstructed_patch).type(local_batch.type())
-                class_assignments = class_assignments.type(local_batch.type())
+                # reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
+                class_assignments = class_assignments.detach().type(local_batch.type())
             aggregator1.add_batch(class_assignments, locations)
             aggregator2.add_batch(reconstructed_patch, locations)
 
