@@ -518,7 +518,7 @@ class Pipeline:
                     'optimizer': self.optimizer.state_dict(),
                     'amp': None})
 
-    def test(self, test_logger, test_subjects=None, save_results=True):
+    def test_dummy(self, test_logger, test_subjects=None, save_results=True):
         test_logger.debug('Testing...')
         result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
         os.makedirs(result_root, exist_ok=True)
@@ -555,12 +555,52 @@ class Pipeline:
                 # save_nifti(class_assignments, os.path.join(result_root, subjectname + "_WNET_v2_seg_vol.nii.gz"))
                 save_nifti(reconstructed_patch, os.path.join(result_root, subjectname + "_recr.nii.gz"))
 
+    def test(self, test_logger, test_subjects=None, save_results=True):
+        test_logger.debug('Testing...')
+        self.model.eval()
+        result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
+        os.makedirs(result_root, exist_ok=True)
+        test_subject = test_subjects[0]
+        subjectname = test_subject['subjectname']
+        overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
+        grid_sampler = tio.inference.GridSampler(
+            test_subject,
+            self.patch_size,
+            overlap,
+        )
+
+        aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+        aggregator2 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+        patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
+                                                   num_workers=self.num_worker)
+
+        for index, patches_batch in enumerate(tqdm(patch_loader)):
+            local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
+            local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
+            local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
+            locations = patches_batch[tio.LOCATION]
+
+            with autocast(enabled=self.with_apex):
+                class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
+                ignore, class_assignments = torch.max(class_preds, 1)
+                reconstructed_patch = torch.sigmoid(reconstructed_patch).type(local_batch.type())
+                class_assignments = class_assignments.type(local_batch.type())
+            aggregator1.add_batch(class_assignments, locations)
+            aggregator2.add_batch(reconstructed_patch, locations)
+
+        class_probs = aggregator1.get_output_tensor().squeeze().numpy()
+        reconstructed_image = aggregator2.get_output_tensor().squeeze().numpy()
+
+        save_nifti(class_probs, os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
+        save_nifti(reconstructed_image, os.path.join(result_root, subjectname + "_recr.nii.gz"))
+
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
 
         sub_dict = {
             "img": tio.ScalarImage(image_path),
             "subjectname": image_name,
+            "sampling_map": tio.Image(image_path.split('.')[0] + '_mask.nii.gz', type=tio.SAMPLING_MAP)
         }
 
         if bool(label_path):
