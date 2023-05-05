@@ -503,18 +503,24 @@ class Pipeline:
 
             with autocast(enabled=self.with_apex):
                 class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
-                ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
                 reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
-                class_assignments = class_assignments.detach().type(local_batch.type())
-            aggregator1.add_batch(class_assignments, locations)
+                class_preds = class_preds.detach().type(local_batch.type())
+            aggregator1.add_batch(class_preds, locations)
             aggregator2.add_batch(reconstructed_patch, locations)
 
-        class_probs = aggregator1.get_output_tensor().squeeze().numpy()
-        reconstructed_image = aggregator2.get_output_tensor().squeeze().numpy()
+        class_probs = aggregator1.get_output_tensor()
+        ignore, class_assignments = torch.max(class_probs, 1, keepdim=True)
+        reconstructed_image = aggregator2.get_output_tensor()
 
-        save_nifti(class_probs, os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
-        save_nifti(reconstructed_image, os.path.join(result_root, subjectname + "_recr.nii.gz"))
+        # to avoid memory errors
+        torch.cuda.empty_cache()
+
+        torch.save(class_probs, os.path.join(result_root, subjectname + "_class_probs.pth"))
+        torch.save(reconstructed_image, os.path.join(result_root, subjectname + "_recr.pth"))
+
+        save_nifti(class_assignments.squeeze().numpy(), os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
+        save_nifti(reconstructed_image.squeeze().numpy(), os.path.join(result_root, subjectname + "_recr.nii.gz"))
 
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
