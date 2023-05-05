@@ -519,8 +519,8 @@ class Pipeline:
         torch.save(class_probs, os.path.join(result_root, subjectname + "_class_probs.pth"))
         torch.save(reconstructed_image, os.path.join(result_root, subjectname + "_recr.pth"))
 
-        save_nifti(class_assignments.squeeze().numpy(), os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
-        save_nifti(reconstructed_image.squeeze().numpy(), os.path.join(result_root, subjectname + "_recr.nii.gz"))
+        save_nifti(class_assignments.squeeze().numpy().astype(np.float32), os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
+        save_nifti(reconstructed_image.squeeze().numpy().astype(np.float32), os.path.join(result_root, subjectname + "_recr.nii.gz"))
 
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
