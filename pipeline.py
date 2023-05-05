@@ -590,7 +590,7 @@ class Pipeline:
             aggregator2.add_batch(reconstructed_patch, locations)
 
         class_probs = aggregator1.get_output_tensor()
-        ignore, class_assignments = torch.max(class_probs, 1, keepdim=True)
+        ignore, class_assignments = torch.max(class_probs, 0, keepdim=True)
         reconstructed_image = aggregator2.get_output_tensor()
 
         # to avoid memory errors
