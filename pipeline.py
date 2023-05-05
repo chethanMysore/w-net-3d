@@ -429,8 +429,8 @@ class Pipeline:
             self.wandb.log({"SoftNcutLoss_val": total_soft_ncut_loss, "ReconstructionLoss_val": total_reconstr_loss,
                             "total_loss_val": total_loss}, step=epoch)
 
-        if self.LOWEST_LOSS > total_soft_ncut_loss:  # Save best metric evaluation weights
-            self.LOWEST_LOSS = total_soft_ncut_loss
+        if self.LOWEST_LOSS > total_loss:  # Save best metric evaluation weights
+            self.LOWEST_LOSS = total_loss
             self.logger.info(
                 'Best metric... @ epoch:' + str(training_index) + ' Current Lowest loss:' + str(self.LOWEST_LOSS))
 
