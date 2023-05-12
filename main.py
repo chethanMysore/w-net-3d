@@ -161,11 +161,11 @@ if __name__ == '__main__':
                         help="radius of the voxel")
     parser.add_argument("-sigmaI",
                         type=int,
-                        default=10,
+                        default=1,
                         help="SigmaI")
     parser.add_argument("-sigmaX",
                         type=int,
-                        default=4,
+                        default=5,
                         help="SigmaX")
     parser.add_argument("-wandb",
                         default=True,

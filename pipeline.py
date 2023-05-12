@@ -78,8 +78,8 @@ class Pipeline:
         self.sigmaX = cmd_args.sigmaX
         self.similarity_loss = SimilarityLoss()
         self.continuity_loss = ContinuityLoss(self.batch_size, self.patch_size, self.num_classes)
-        # self.soft_ncut_loss = torch.nn.DataParallel(
-        #     SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX, patch_size=self.patch_size))
+        self.soft_ncut_loss = torch.nn.DataParallel(
+            SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX))
         # self.soft_ncut_loss.cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
@@ -207,6 +207,7 @@ class Pipeline:
         for epoch in range(self.num_epochs):
             print("Train Epoch: " + str(epoch) + " of " + str(self.num_epochs))
             self.model.train()  # make sure to assign mode:train, because in validation, mode is assigned as eval
+            total_soft_ncut_loss = 0
             total_similarity_loss = 0
             total_continuity_loss = 0
             total_reconstr_loss = 0
@@ -279,6 +280,11 @@ class Pipeline:
                     normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
                     ignore, class_assignments = torch.max(normalised_res_map, 1)
 
+                    # Compute Soft-N-Cut Loss
+                    class_preds = self.model.module.activation(normalised_res_map)
+                    soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
+                    soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
+
                     # Compute Similarity Loss
                     similarity_loss = self.sim_loss_coeff * self.similarity_loss(normalised_res_map, class_assignments)
 
@@ -293,7 +299,7 @@ class Pipeline:
                     reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
 
                     # Total Loss = # beta*(reconstruction_loss) + alpha*(regularisation_loss)
-                    loss = similarity_loss + continuity_loss + reconstruction_loss + reg_loss
+                    loss = soft_ncut_loss + similarity_loss + continuity_loss + reconstruction_loss + reg_loss
 
                     # Update both encoder and decoder
                     self.scaler.scale(loss).backward()
@@ -309,6 +315,7 @@ class Pipeline:
                 training_batch_index += 1
 
                 # Initialising the average loss metrics
+                total_soft_ncut_loss += soft_ncut_loss.detach().item()
                 total_similarity_loss += similarity_loss.detach().item()
                 total_continuity_loss += continuity_loss.detach().item()
 
@@ -334,12 +341,13 @@ class Pipeline:
 
                 self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
                                  "\n SimilarityLoss: " + str(similarity_loss) + " ContinuityLoss: " + str(
-                    continuity_loss) + " ReconstructionLoss: " +
+                    continuity_loss) + " SoftNCutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
                                  str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
                 # To avoid memory errors
                 torch.cuda.empty_cache()
 
             # Calculate the average loss per batch in one epoch
+            total_soft_ncut_loss /= (batch_index + 1.0)
             total_similarity_loss /= (batch_index + 1.0)
             total_continuity_loss /= (batch_index + 1.0)
             total_reconstr_loss /= (num_batches + 1.0)
@@ -350,10 +358,12 @@ class Pipeline:
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
                              "\nReconstructionLoss: " +
                              str(total_reconstr_loss) + " reg_loss: " + str(total_reg_loss) +
+                             " soft_ncut_loss: " + str(total_soft_ncut_loss) +
                              " sim_loss: " + str(total_similarity_loss) +
                              " cont_loss: " + str(total_continuity_loss) +
                              " total_loss: " + str(total_loss))
             write_epoch_summary(writer=self.writer_training, index=epoch,
+                                soft_ncut_loss=total_soft_ncut_loss,
                                 similarity_loss=total_similarity_loss,
                                 continuity_loss=total_continuity_loss,
                                 reconstruction_loss=total_reconstr_loss,
@@ -361,7 +371,7 @@ class Pipeline:
                                 total_loss=total_loss)
             if self.wandb is not None:
                 self.wandb.log(
-                    {"ReconstructionLoss_train": total_reconstr_loss,
+                    {"ReconstructionLoss_train": total_reconstr_loss, "SoftNCutLoss_train": total_soft_ncut_loss,
                      "total_reg_loss_train": total_reg_loss, "similarity_loss_train": total_similarity_loss,
                      "continuity_loss_train": total_continuity_loss, "total_loss_train": total_loss}, step=epoch)
 
@@ -400,7 +410,7 @@ class Pipeline:
         self.logger.debug('Validating...')
         print("Validate Epoch: " + str(epoch) + " of " + str(self.num_epochs))
 
-        total_reconstr_loss, total_similarity_loss, total_continuity_loss, total_loss = 0, 0, 0, 0
+        total_reconstr_loss, total_soft_ncut_loss, total_similarity_loss, total_continuity_loss, total_loss = 0, 0, 0, 0, 0
         no_patches = 0
         self.model.eval()
         try:
@@ -435,6 +445,11 @@ class Pipeline:
                                                                              ops="both")
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
 
+                        # Compute Soft-N-Cut Loss
+                        class_preds = self.model.activation(normalised_res_map)
+                        soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
+                        soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
+
                         # Compute Similarity Loss
                         similarity_loss = self.sim_loss_coeff * self.similarity_loss(normalised_res_map, class_assignments)
 
@@ -447,7 +462,7 @@ class Pipeline:
 
                         # Total Loss = (theta*SimilarityLoss + (1-theta)*ContinuityLoss) +
                         # (reconstruction_loss) + alpha*(regularisation_loss)
-                        loss = similarity_loss + continuity_loss + reconstruction_loss
+                        loss = soft_ncut_loss + similarity_loss + continuity_loss + reconstruction_loss
                         # if not str(self.train_encoder_only).lower() == "true":
                         #     loss += reconstruction_loss
                     torch.cuda.empty_cache()
@@ -455,6 +470,7 @@ class Pipeline:
                 except Exception as error:
                     self.logger.exception(error)
 
+                total_soft_ncut_loss += soft_ncut_loss.detach().item()
                 total_similarity_loss += similarity_loss.detach().item()
                 total_continuity_loss += continuity_loss.detach().item()
 
@@ -468,12 +484,14 @@ class Pipeline:
                 self.logger.info("Batch_Index:" + str(index) + " Validation..." +
                                  "\nReconstructionLoss: " +
                                  str(total_reconstr_loss) +
+                                 " soft_ncut_loss: " + str(total_soft_ncut_loss) +
                                  " sim_loss: " + str(total_similarity_loss) +
                                  " cont_loss: " + str(total_continuity_loss) +
                                  " total_loss: " + str(total_loss))
                 no_patches += 1
 
         # Average the losses
+        total_soft_ncut_loss = total_soft_ncut_loss / (no_patches + 1)
         total_similarity_loss = total_similarity_loss / (no_patches + 1)
         total_continuity_loss = total_continuity_loss / (no_patches + 1)
         total_reconstr_loss = total_reconstr_loss / (no_patches + 1)
@@ -481,6 +499,7 @@ class Pipeline:
 
         process = ' Validating'
         self.logger.info("Epoch:" + str(training_index) + process + "..." +
+                         "\n SoftNCutLoss:" + str(total_soft_ncut_loss) +
                          "\n SimilarityLoss:" + str(total_similarity_loss) +
                          "\n ContinuityLoss:" + str(total_continuity_loss) +
                          "\n ReconstructionLoss:" + str(total_reconstr_loss) +
@@ -489,13 +508,14 @@ class Pipeline:
         # write_summary(writer, training_index, similarity_loss=total_similarity_loss,
         #               continuity_loss=total_continuity_loss, total_loss=total_loss)
         write_epoch_summary(writer, epoch,
+                            soft_ncut_loss=total_soft_ncut_loss,
                             similarity_loss=total_similarity_loss,
                             continuity_loss=total_continuity_loss,
                             reconstruction_loss=total_reconstr_loss,
                             total_loss=total_loss)
         if self.wandb is not None:
             self.wandb.log(
-                {"ReconstructionLoss_val": total_reconstr_loss,
+                {"ReconstructionLoss_val": total_reconstr_loss, "SoftNCutLoss_val": total_soft_ncut_loss,
                  "similarity_loss_val": total_similarity_loss,
                  "continuity_loss_val": total_continuity_loss, "total_loss_val": total_loss}, step=epoch)
 
