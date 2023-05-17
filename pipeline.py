@@ -446,7 +446,7 @@ class Pipeline:
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                         # Compute Soft-N-Cut Loss
-                        class_preds = self.model.activation(normalised_res_map)
+                        class_preds = self.model.module.activation(normalised_res_map)
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
 
