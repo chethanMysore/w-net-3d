@@ -92,25 +92,38 @@ class Pipeline:
         self.predictor_subject_name = cmd_args.predictor_subject_name
 
         if cmd_args.train:  # Only if training is to be performed
+            # training_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/train/',
+            #                                           patch_size=self.patch_size,
+            #                                           samples_per_epoch=self.samples_per_epoch,
+            #                                           stride_length=self.stride_length, stride_width=self.stride_width,
+            #                                           stride_depth=self.stride_depth, num_worker=self.num_worker)
             training_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/train/',
                                                       patch_size=self.patch_size,
                                                       samples_per_epoch=self.samples_per_epoch,
                                                       stride_length=self.stride_length, stride_width=self.stride_width,
-                                                      stride_depth=self.stride_depth, num_worker=self.num_worker)
+                                                      stride_depth=self.stride_depth, num_worker=self.num_worker,
+                                                      get_subjects_only=True)
             self.train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size, shuffle=True,
-                                                            num_workers=0)
-            validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
-                                                                      patch_size=self.patch_size,
-                                                                      samples_per_epoch=self.samples_per_epoch,
-                                                                      stride_length=self.stride_length,
-                                                                      stride_width=self.stride_width,
-                                                                      stride_depth=self.stride_depth,
-                                                                      is_train=False, num_worker=self.num_worker)
-            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
-                                                     num_samples=(self.samples_per_epoch // num_subjects) * 60)
+                                                            num_workers=self.num_worker)
+            # validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
+            #                                                           patch_size=self.patch_size,
+            #                                                           samples_per_epoch=self.samples_per_epoch,
+            #                                                           stride_length=self.stride_length,
+            #                                                           stride_width=self.stride_width,
+            #                                                           stride_depth=self.stride_depth,
+            #                                                           is_train=False, num_worker=self.num_worker)
+            # sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
+            #                                          num_samples=(self.samples_per_epoch // num_subjects) * 60)
+            validation_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
+                                                        patch_size=self.patch_size,
+                                                        samples_per_epoch=self.samples_per_epoch,
+                                                        stride_length=self.stride_length,
+                                                        stride_width=self.stride_width,
+                                                        stride_depth=self.stride_depth,
+                                                        is_train=False, num_worker=self.num_worker,
+                                                        get_subjects_only=True)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=0,
-                                                               sampler=sampler)
+                                                               shuffle=False, num_workers=self.num_worker)
 
     @staticmethod
     def create_tio_sub_ds(vol_path, patch_size, samples_per_epoch, stride_length, stride_width, stride_depth,
@@ -123,15 +136,11 @@ class Pipeline:
             if "_mask" in vol:
                 continue
             filename = os.path.basename(vol).split('.')[0]
-            # subject = tio.Subject(
-            #     img=tio.ScalarImage(vol),
-            #     subjectname=filename,
-            # )
 
             subject = tio.Subject(
                 img=tio.ScalarImage(vol),
                 sampling_map=tio.Image(vol.split('.')[0] + '_mask.nii.gz', type=tio.SAMPLING_MAP),
-                subjectname=filename,
+                subjectname=filename
             )
 
             # vol_transforms = tio.ToCanonical(), tio.Resample(tio.ScalarImage(vol))
@@ -140,7 +149,7 @@ class Pipeline:
             subjects.append(subject)
 
         if get_subjects_only:
-            return subjects
+            return tio.SubjectsDataset(subjects)
 
         if is_train:
             subjects_dataset = tio.SubjectsDataset(subjects)
@@ -202,8 +211,10 @@ class Pipeline:
             for batch_index, patches_batch in enumerate(tqdm(self.train_loader)):
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
+                local_batch = torch.nn.functional.pad(local_batch, (2, 3), "constant", 0.0)
                 local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
                 local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
+                local_batch_mask = torch.nn.functional.pad(local_batch_mask, (2, 3), "constant", 0.0)
                 # local_batch = torch.movedim(local_batch, -1, -3)
                 # Transfer to GPU
                 self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
@@ -359,26 +370,26 @@ class Pipeline:
         try:
             data_loader = self.validate_loader
         except Exception as error:
-            validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
-                                                                      patch_size=self.patch_size,
-                                                                      samples_per_epoch=self.samples_per_epoch,
-                                                                      stride_length=self.stride_length,
-                                                                      stride_width=self.stride_width,
-                                                                      stride_depth=self.stride_depth,
-                                                                      is_train=False, num_worker=self.num_worker)
-            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
-                                                     num_samples=(self.samples_per_epoch // num_subjects) * 40)
+            validation_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
+                                                        patch_size=self.patch_size,
+                                                        samples_per_epoch=self.samples_per_epoch,
+                                                        stride_length=self.stride_length,
+                                                        stride_width=self.stride_width,
+                                                        stride_depth=self.stride_depth,
+                                                        is_train=False, num_worker=self.num_worker,
+                                                        get_subjects_only=True)
             data_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                      shuffle=False, num_workers=0,
-                                                      sampler=sampler)
+                                                      shuffle=False, num_workers=self.num_worker)
         writer = self.writer_validating
         with torch.no_grad():
             for index, patches_batch in enumerate(tqdm(data_loader)):
                 self.logger.info("loading" + str(index))
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
+                local_batch = torch.nn.functional.pad(local_batch, (2, 3), "constant", 0.0)
                 local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
                 local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
+                local_batch_mask = torch.nn.functional.pad(local_batch_mask, (2, 3), "constant", 0.0)
                 # local_batch = torch.movedim(local_batch, -1, -3)
 
                 try:
