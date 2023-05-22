@@ -304,6 +304,15 @@ class Pipeline:
                     loss = soft_ncut_loss + similarity_loss + continuity_loss + reconstruction_loss + reg_loss
 
                     # Update both encoder and decoder
+                    if type(loss) is list:
+                        for i in range(len(loss)):
+                            if i + 1 == len(loss):  # final loss
+                                self.scaler.scale(loss[i]).backward()
+                            else:
+                                self.scaler.scale(loss[i]).backward(retain_graph=True)
+                        floss = torch.sum(torch.stack(loss))
+                    else:
+                        self.scaler.scale(loss).backward()
                     self.scaler.scale(loss).backward()
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
