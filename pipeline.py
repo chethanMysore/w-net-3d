@@ -189,6 +189,11 @@ class Pipeline:
                 batch[i] = batch[i] / batch[i].max()
         return batch
 
+    @staticmethod
+    def label_preprocessor(batch):
+        batch = torch.where(batch > 0.0, 1.0, 0.0)
+        return batch
+
     def load(self, checkpoint_path=None, load_best=True):
         if checkpoint_path is None:
             checkpoint_path = self.CHECKPOINT_PATH
@@ -227,7 +232,7 @@ class Pipeline:
             for batch_index, patches_batch in enumerate(tqdm(self.train_loader)):
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                label_batch = Pipeline.normaliser(patches_batch['label'][tio.DATA].float().cuda())
+                label_batch = Pipeline.label_preprocessor(patches_batch['label'][tio.DATA].float().cuda())
                 local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
                 local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
                 # Transfer to GPU
@@ -459,7 +464,7 @@ class Pipeline:
                 self.logger.info("loading" + str(index))
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                label_batch = Pipeline.normaliser(patches_batch['label'][tio.DATA].float().cuda())
+                label_batch = Pipeline.label_preprocessor(patches_batch['label'][tio.DATA].float().cuda())
                 local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
                 local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
                 # local_batch = torch.movedim(local_batch, -1, -3)

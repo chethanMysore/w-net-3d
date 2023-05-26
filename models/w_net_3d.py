@@ -216,7 +216,7 @@ class WNet3D(nn.Module):
     def __init__(self, img_ch=1, output_ch=6):
         super(WNet3D, self).__init__()
 
-        self.Encoder = AttUnet(img_ch=img_ch, output_ch=output_ch)
+        self.Encoder = AttUnet(img_ch=img_ch, output_ch=1)
         self.Decoder = AttUnet(img_ch=output_ch, output_ch=1)
 
         self.activation = torch.nn.Softmax(dim=1)
