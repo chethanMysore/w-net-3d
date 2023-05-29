@@ -15,6 +15,8 @@ from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisa
 from utils.results_analyser import *
 from utils.vessel_utils import (load_model, load_model_with_amp, save_model, write_epoch_summary)
 from utils.madam import Madam
+from utils.mtadam import MTAdam
+from utils.datasets import SRDataset
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
@@ -35,7 +37,12 @@ class Pipeline:
         self.learning_rate = cmd_args.learning_rate
         # self.optimizer = torch.optim.RMSprop(model.parameters(), lr=cmd_args.learning_rate,
         #                                      weight_decay=cmd_args.learning_rate*10, momentum=cmd_args.learning_rate*100)
-        self.optimizer = Madam(model.parameters(), lr=cmd_args.learning_rate)
+        if str(cmd_args.use_madam).lower() == "true":
+            self.optimizer = Madam(model.parameters(), lr=cmd_args.learning_rate)
+        elif str(cmd_args.use_mtadam).lower() == "true":
+            self.optimizer = MTAdam(model.parameters(), lr=cmd_args.learning_rate)
+        else:
+            self.optimizer = torch.optim.Adam(model.parameters(), lr=cmd_args.learning_rate)
         self.num_epochs = cmd_args.num_epochs
         self.writer_training = writer_training
         self.writer_validating = writer_validating
@@ -75,8 +82,9 @@ class Pipeline:
         self.soft_ncut_loss.cuda()
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
-        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
-                                                      loss_type="L1")
+        self.reconstruction_loss = torch.nn.DataParallel(
+            ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
+                               loss_type="L1"))
         self.reconstruction_loss.cuda()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
@@ -90,72 +98,80 @@ class Pipeline:
         self.logger.info("\nLearning Rate: " + str(self.learning_rate))
         self.logger.info("\nNumber of Convolutional Blocks: " + str(cmd_args.num_conv))
         self.predictor_subject_name = cmd_args.predictor_subject_name
+        if cmd_args.training_mode != "unsupervised":
+            self.label_dir_path_train = self.DATASET_PATH + '/train_label/'
+            self.label_dir_path_val = self.DATASET_PATH + '/validate_label/'
+        else:
+            self.label_dir_path_train, self.label_dir_path_val = None, None
 
         if cmd_args.train:  # Only if training is to be performed
-            training_set = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/train/',
-                                                      patch_size=self.patch_size,
-                                                      samples_per_epoch=self.samples_per_epoch,
-                                                      stride_length=self.stride_length, stride_width=self.stride_width,
-                                                      stride_depth=self.stride_depth, num_worker=self.num_worker)
-            self.train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size, shuffle=True,
-                                                            num_workers=0)
-            validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
-                                                                      patch_size=self.patch_size,
-                                                                      samples_per_epoch=self.samples_per_epoch,
-                                                                      stride_length=self.stride_length,
-                                                                      stride_width=self.stride_width,
-                                                                      stride_depth=self.stride_depth,
-                                                                      is_train=False, num_worker=self.num_worker)
-            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
-                                                     num_samples=(self.samples_per_epoch // num_subjects) * 60)
+            training_set = SRDataset(logger=logger, patch_size=self.patch_size,
+                                     dir_path=self.DATASET_PATH + '/train/',
+                                     label_dir_path=self.label_dir_path_train,
+                                     stride_depth=self.stride_depth, stride_length=self.stride_length,
+                                     stride_width=self.stride_width, fly_under_percent=None,
+                                     patch_size_us=self.patch_size, pre_interpolate=None, norm_data=False,
+                                     pre_load=True,
+                                     return_coords=True)
+            sampler = torch.utils.data.RandomSampler(data_source=training_set, replacement=True,
+                                                     num_samples=self.samples_per_epoch)
+            self.train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size,
+                                                            num_workers=self.num_worker,
+                                                            sampler=sampler, pin_memory=True)
+            validation_set = Pipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/validate/',
+                                                        label_dir_path=self.label_dir_path_val,
+                                                        patch_size=self.patch_size,
+                                                        stride_length=self.stride_length,
+                                                        stride_width=self.stride_width,
+                                                        stride_depth=self.stride_depth,
+                                                        logger=self.logger, is_validate=True)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=0,
-                                                               sampler=sampler)
+                                                               shuffle=False, num_workers=self.num_worker,
+                                                               pin_memory=True, sampler=sampler)
 
     @staticmethod
-    def create_tio_sub_ds(vol_path, patch_size, samples_per_epoch, stride_length, stride_width, stride_depth,
-                          is_train=True, get_subjects_only=False, num_worker=0):
-
-        vols = glob(vol_path + "*.nii") + glob(vol_path + "*.nii.gz")
-        subjects = []
-        for i in range(len(vols)):
-            vol = vols[i]
-            if "_mask" in vol:
-                continue
-            filename = os.path.basename(vol).split('.')[0]
-            # subject = tio.Subject(
-            #     img=tio.ScalarImage(vol),
-            #     subjectname=filename,
-            # )
-
-            subject = tio.Subject(
-                img=tio.ScalarImage(vol),
-                sampling_map=tio.Image(vol.split('.')[0] + '_mask.nii.gz', type=tio.SAMPLING_MAP),
-                subjectname=filename,
-            )
-
-            # vol_transforms = tio.ToCanonical(), tio.Resample(tio.ScalarImage(vol))
-            # transform = tio.Compose(vol_transforms)
-            # subject = transform(subject)
-            subjects.append(subject)
-
-        if get_subjects_only:
-            return subjects
-
-        if is_train:
-            subjects_dataset = tio.SubjectsDataset(subjects)
-            # sampler = tio.data.UniformSampler(patch_size)
-            sampler = tio.data.WeightedSampler(patch_size, 'sampling_map')
-            patches_queue = tio.Queue(
-                subjects_dataset,
-                max_length=(samples_per_epoch // len(subjects)) * 4,
-                samples_per_volume=(samples_per_epoch // len(subjects)),
-                sampler=sampler,
-                num_workers=num_worker,
-                start_background=True
-            )
-            return patches_queue
+    def create_tio_sub_ds(patch_size, dir_path, stride_length, stride_width, stride_depth, logger, is_validate=False,
+                          get_subjects_only=False, label_dir_path=None):
+        if is_validate:
+            validation_ds = SRDataset(logger=logger, patch_size=patch_size,
+                                      dir_path=dir_path,
+                                      label_dir_path=label_dir_path,
+                                      stride_depth=stride_depth, stride_length=stride_length,
+                                      stride_width=stride_width, fly_under_percent=None,
+                                      patch_size_us=patch_size, pre_interpolate=None, norm_data=False,
+                                      pre_load=True,
+                                      return_coords=True)
+            overlap = np.subtract(patch_size, (stride_length, stride_width, stride_depth))
+            grid_samplers = []
+            for i in range(len(validation_ds)):
+                grid_sampler = tio.inference.GridSampler(
+                    validation_ds[i],
+                    patch_size,
+                    overlap,
+                )
+                grid_samplers.append(grid_sampler)
+            return torch.utils.data.ConcatDataset(grid_samplers)
         else:
+            vols = glob(dir_path + "*.nii") + glob(dir_path + "*.nii.gz")
+            labels = glob(label_dir_path + "*.nii") + glob(label_dir_path + "*.nii.gz")
+            subjects = []
+            for i in range(len(vols)):
+                v = vols[i]
+                filename = os.path.basename(v).split('.')[0]
+                l = [s for s in labels if filename in s][0]
+                subject = tio.Subject(
+                    img=tio.ScalarImage(v),
+                    label=tio.LabelMap(l),
+                    subjectname=filename,
+                )
+                transforms = tio.ToCanonical(), tio.Resample(tio.ScalarImage(v))
+                transform = tio.Compose(transforms)
+                subject = transform(subject)
+                subjects.append(subject)
+
+            if get_subjects_only:
+                return subjects
+
             overlap = np.subtract(patch_size, (stride_length, stride_width, stride_depth))
             grid_samplers = []
             for i in range(len(subjects)):
@@ -165,7 +181,7 @@ class Pipeline:
                     overlap,
                 )
                 grid_samplers.append(grid_sampler)
-            return torch.utils.data.ConcatDataset(grid_samplers), len(grid_samplers)
+            return torch.utils.data.ConcatDataset(grid_samplers)
 
     @staticmethod
     def normaliser(batch):
@@ -191,72 +207,28 @@ class Pipeline:
         training_batch_index = 0
         for epoch in range(self.num_epochs):
             print("Train Epoch: " + str(epoch) + " of " + str(self.num_epochs))
-            self.model.train()  # make sure to assign mode:train, because in validation, mode is assigned as eval
+            self.model.train()
             total_soft_ncut_loss = 0
             total_reconstr_loss = 0
             total_reg_loss = 0
             total_loss = 0
-            batch_index = 0
             num_batches = 0
 
             for batch_index, patches_batch in enumerate(tqdm(self.train_loader)):
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
-                local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
-                # local_batch = torch.movedim(local_batch, -1, -3)
                 # Transfer to GPU
                 self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
-
                 # Clear gradients
                 self.optimizer.zero_grad()
 
-                # with autocast(enabled=self.with_apex):
-                #     # Get the classification response map(normalized) and respective class assignments after argmax
-                #     class_preds = self.model(local_batch, local_batch_mask, ops="enc")
-                #     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
-                #     soft_ncut_loss = soft_ncut_loss.mean()
-                #
-                # # Update only encoder by backpropagating soft-n-cut loss
-                # self.scaler.scale(soft_ncut_loss).backward(retain_graph=True)
-                # if self.clip_grads:
-                #     self.scaler.unscale_(self.optimizer)
-                #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                # self.scaler.step(self.optimizer)
-                # self.scaler.update()
-                #
-                # loss = soft_ncut_loss
-                #
-                # if not str(self.train_encoder_only).lower() == "true":
-                #     # To avoid memory errors
-                #     torch.cuda.empty_cache()
-                #
-                #     # clear gradients
-                #     self.optimizer.zero_grad()
-                #
-                #     with autocast(enabled=self.with_apex):
-                #         reconstructed_patch = self.model(local_batch, local_batch_mask, ops="dec")
-                #         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                #         reconstruction_loss = self.reconstruction_loss(reconstructed_patch, local_batch)
-                #         reg_loss = l2_regularisation_loss(self.model)
-                #         recr_reg_loss = reconstruction_loss + self.reg_alpha * reg_loss
-                #
-                #     # Update the WNet by backpropagating reconstruction_loss
-                #     self.scaler.scale(recr_reg_loss).backward()
-                #     if self.clip_grads:
-                #         self.scaler.unscale_(self.optimizer)
-                #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                #     self.scaler.step(self.optimizer)
-                #     self.scaler.update()
-                #
-                #     loss = soft_ncut_loss + reconstruction_loss + self.reg_alpha * reg_loss
-
                 with autocast(enabled=self.with_apex):
-                    class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
+                    class_preds, reconstructed_patch = self.model(local_batch, ops="both")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                     soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                    reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
+                    reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
+                                                                                              local_batch)
                     reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
                     loss = soft_ncut_loss + reconstruction_loss
                     self.scaler.scale(loss).backward()
@@ -266,7 +238,6 @@ class Pipeline:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                 torch.cuda.empty_cache()
-
 
                 training_batch_index += 1
 
@@ -318,25 +289,6 @@ class Pipeline:
                     {"SoftNcutLoss_train": total_soft_ncut_loss, "ReconstructionLoss_train": total_reconstr_loss,
                      "total_reg_loss_train": total_reg_loss, "total_loss_train": total_loss}, step=epoch)
 
-            # if self.with_apex:
-            #     save_model(self.CHECKPOINT_PATH, {
-            #         'epoch_type': 'last',
-            #         'epoch': epoch,
-            #         # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
-            #         'state_dict': self.model.state_dict(),
-            #         'optimizer': self.optimizer.state_dict(),
-            #         'amp': self.scaler.state_dict()
-            #     })
-            # else:
-            #     save_model(self.CHECKPOINT_PATH, {
-            #         'epoch_type': 'last',
-            #         'epoch': epoch,
-            #         # Let is always overwrite,we need just the last checkpoint and best checkpoint(saved after validate)
-            #         'state_dict': self.model.state_dict(),
-            #         'optimizer': self.optimizer.state_dict(),
-            #         'amp': None
-            #     })
-
             torch.cuda.empty_cache()  # to avoid memory errors
             self.validate(training_batch_index, epoch)
             torch.cuda.empty_cache()  # to avoid memory errors
@@ -359,18 +311,15 @@ class Pipeline:
         try:
             data_loader = self.validate_loader
         except Exception as error:
-            validation_set, num_subjects = Pipeline.create_tio_sub_ds(vol_path=self.DATASET_PATH + '/validate/',
-                                                                      patch_size=self.patch_size,
-                                                                      samples_per_epoch=self.samples_per_epoch,
-                                                                      stride_length=self.stride_length,
-                                                                      stride_width=self.stride_width,
-                                                                      stride_depth=self.stride_depth,
-                                                                      is_train=False, num_worker=self.num_worker)
-            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
-                                                     num_samples=(self.samples_per_epoch // num_subjects) * 40)
+            validation_set = Pipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/validate/',
+                                                        label_dir_path=self.label_dir_path_val,
+                                                        patch_size=self.patch_size,
+                                                        stride_length=self.stride_length,
+                                                        stride_width=self.stride_width,
+                                                        stride_depth=self.stride_depth,
+                                                        logger=self.logger, is_validate=True)
             data_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                      shuffle=False, num_workers=0,
-                                                      sampler=sampler)
+                                                      shuffle=False, num_workers=self.num_worker)
         writer = self.writer_validating
         with torch.no_grad():
             for index, patches_batch in enumerate(tqdm(data_loader)):
@@ -379,8 +328,6 @@ class Pipeline:
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                 local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
                 local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
-                # local_batch = torch.movedim(local_batch, -1, -3)
-
                 try:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
@@ -388,7 +335,8 @@ class Pipeline:
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch, local_batch)
+                        reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
+                                                                                                  local_batch)
 
                         if not str(self.train_encoder_only).lower() == "true":
                             loss = soft_ncut_loss + reconstruction_loss
@@ -420,8 +368,6 @@ class Pipeline:
                          "\n ReconstructionLoss:" + str(total_reconstr_loss) +
                          "\n total_loss:" + str(total_loss))
 
-        # write_summary(writer, training_index, similarity_loss=total_similarity_loss,
-        #               continuity_loss=total_continuity_loss, total_loss=total_loss)
         write_epoch_summary(writer, epoch, soft_ncut_loss=total_soft_ncut_loss,
                             reconstruction_loss=total_reconstr_loss,
                             total_loss=total_loss)

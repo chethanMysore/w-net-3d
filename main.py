@@ -45,6 +45,9 @@ if __name__ == '__main__':
                         default="",
                         help="Folder path to store output "
                              "Example: /home/output/")
+    parser.add_argument("-training_mode",
+                        default="unsupervised",
+                        help="Training Mode: 'unsupervised' or 'supervised'")
     parser.add_argument('-train',
                         default=True,
                         help="To train the model")
@@ -161,6 +164,12 @@ if __name__ == '__main__':
     parser.add_argument("-train_encoder_only",
                         default=False,
                         help="Set this to true to include wandb logging")
+    parser.add_argument("-use_madam",
+                        default=False,
+                        help="Set this to true to use madam optimizer")
+    parser.add_argument("-use_mtadam",
+                        default=False,
+                        help="Set this to true to use mTadam optimizer")
     # parser.add_argument("-create_brain_mask",
     #                     type=bool,
     #                     default=False,
