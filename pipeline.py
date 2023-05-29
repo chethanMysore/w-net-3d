@@ -231,7 +231,17 @@ class Pipeline:
                                                                                               local_batch)
                     reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
                     loss = soft_ncut_loss + reconstruction_loss
-                    self.scaler.scale(loss).backward()
+
+                    if type(loss.tolist()) is list:
+                        for i in range(len(loss)):
+                            if i + 1 == len(loss):  # final loss
+                                self.scaler.scale(loss[i]).backward()
+                            else:
+                                self.scaler.scale(loss[i]).backward(retain_graph=True)
+                        loss = torch.sum(torch.stack(loss))
+                    else:
+                        self.scaler.scale(loss).backward()
+                    # self.scaler.scale(loss).backward()
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
