@@ -238,7 +238,7 @@ class Pipeline:
                                 self.scaler.scale(loss[i]).backward()
                             else:
                                 self.scaler.scale(loss[i]).backward(retain_graph=True)
-                        loss = torch.sum(torch.stack(loss))
+                        loss = torch.sum(loss)
                     else:
                         self.scaler.scale(loss).backward()
                     # self.scaler.scale(loss).backward()
@@ -252,9 +252,9 @@ class Pipeline:
                 training_batch_index += 1
 
                 # Initialising the average loss metrics
-                total_soft_ncut_loss += soft_ncut_loss.detach().item()
+                total_soft_ncut_loss += soft_ncut_loss.sum().detach().item()
                 try:
-                    total_reconstr_loss += reconstruction_loss.detach().item()
+                    total_reconstr_loss += reconstruction_loss.sum().detach().item()
                     total_reg_loss += reg_loss.detach().item()
                 except Exception as detach_error:
                     if reconstruction_loss:
