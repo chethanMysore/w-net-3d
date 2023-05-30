@@ -132,6 +132,8 @@ class Pipeline:
                                                         stride_width=self.stride_width,
                                                         stride_depth=self.stride_depth,
                                                         logger=self.logger, is_validate=True)
+            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
+                                                     num_samples=self.samples_per_epoch)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
                                                                shuffle=False, num_workers=self.num_worker,
                                                                pin_memory=True, sampler=sampler)
