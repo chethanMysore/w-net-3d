@@ -127,7 +127,9 @@ class Pipeline:
                                                         stride_length=self.stride_length,
                                                         stride_width=self.stride_width,
                                                         stride_depth=self.stride_depth,
-                                                        logger=self.logger, is_validate=True)
+                                                        logger=self.logger, is_validate=False)
+            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
+                                                     num_samples=self.samples_per_epoch)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
                                                                shuffle=False, num_workers=self.num_worker,
                                                                pin_memory=True, sampler=sampler)
@@ -156,15 +158,15 @@ class Pipeline:
             return torch.utils.data.ConcatDataset(grid_samplers)
         else:
             vols = glob(dir_path + "*.nii") + glob(dir_path + "*.nii.gz")
-            labels = glob(label_dir_path + "*.nii") + glob(label_dir_path + "*.nii.gz")
+            # labels = glob(label_dir_path + "*.nii") + glob(label_dir_path + "*.nii.gz")
             subjects = []
             for i in range(len(vols)):
                 v = vols[i]
                 filename = os.path.basename(v).split('.')[0]
-                l = [s for s in labels if filename in s][0]
+                # l = [s for s in labels if filename in s][0]
                 subject = tio.Subject(
                     img=tio.ScalarImage(v),
-                    label=tio.LabelMap(l),
+                    # label=tio.LabelMap(l),
                     subjectname=filename,
                 )
                 transforms = tio.ToCanonical(), tio.Resample(tio.ScalarImage(v))
