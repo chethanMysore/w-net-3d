@@ -77,15 +77,17 @@ class Pipeline:
         self.radius = cmd_args.radius
         self.sigmaI = cmd_args.sigmaI
         self.sigmaX = cmd_args.sigmaX
-        self.soft_ncut_loss = torch.nn.DataParallel(
-            SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX))
-        self.soft_ncut_loss.cuda()
+        # self.soft_ncut_loss = torch.nn.DataParallel(
+        #     SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX))
+        # self.soft_ncut_loss.cuda()
+        self.soft_ncut_loss = SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX)
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
-        self.reconstruction_loss = torch.nn.DataParallel(
-            ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
-                               loss_type="L1"))
-        self.reconstruction_loss.cuda()
+        # self.reconstruction_loss = torch.nn.DataParallel(
+        #     ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
+        #                        loss_type="L1"))
+        # self.reconstruction_loss.cuda()
+        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path, loss_type="L1")
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
