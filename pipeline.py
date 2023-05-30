@@ -71,6 +71,8 @@ class Pipeline:
         # Losses
         self.s_ncut_loss_coeff = cmd_args.s_ncut_loss_coeff
         self.reconstr_loss_coeff = cmd_args.reconstr_loss_coeff
+        self.sim_loss_coeff = cmd_args.sim_loss_coeff
+        self.cont_loss_coeff = cmd_args.cont_loss_coeff
         self.reg_alpha = cmd_args.reg_alpha
 
         # Following metrics can be used to evaluate
@@ -371,12 +373,10 @@ class Pipeline:
                 self.logger.info("loading" + str(index))
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
-                local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
                 try:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
-                        normalised_res_map, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
+                        normalised_res_map, reconstructed_patch = self.model(local_batch, ops="both")
                         ignore, class_assignments = torch.max(normalised_res_map, 1)
 
                         # Compute Soft-N-Cut Loss
