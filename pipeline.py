@@ -129,7 +129,7 @@ class Pipeline:
                                                         stride_depth=self.stride_depth,
                                                         logger=self.logger, is_validate=True)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=0,
+                                                               shuffle=False, num_workers=self.num_worker,
                                                                pin_memory=True, sampler=sampler)
 
     @staticmethod
@@ -334,7 +334,7 @@ class Pipeline:
             sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
                                                      num_samples=self.samples_per_epoch)
             data_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                      shuffle=False, num_workers=0,
+                                                      shuffle=False, num_workers=self.num_worker,
                                                       pin_memory=True, sampler=sampler)
         writer = self.writer_validating
         with torch.no_grad():
