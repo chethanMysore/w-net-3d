@@ -87,7 +87,8 @@ class Pipeline:
         #     ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
         #                        loss_type="L1"))
         # self.reconstruction_loss.cuda()
-        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path, loss_type="L1")
+        self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
+                                                      loss_type="L1")
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -128,7 +129,7 @@ class Pipeline:
                                                         stride_depth=self.stride_depth,
                                                         logger=self.logger, is_validate=True)
             self.validate_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                               shuffle=False, num_workers=self.num_worker,
+                                                               shuffle=False, num_workers=0,
                                                                pin_memory=True, sampler=sampler)
 
     @staticmethod
@@ -240,7 +241,7 @@ class Pipeline:
                                 self.scaler.scale(loss[i]).backward()
                             else:
                                 self.scaler.scale(loss[i]).backward(retain_graph=True)
-                        loss = torch.sum(loss)
+                        loss = torch.mean(loss)
                     else:
                         self.scaler.scale(loss).backward()
                     # self.scaler.scale(loss).backward()
@@ -254,9 +255,9 @@ class Pipeline:
                 training_batch_index += 1
 
                 # Initialising the average loss metrics
-                total_soft_ncut_loss += soft_ncut_loss.sum().detach().item()
+                total_soft_ncut_loss += soft_ncut_loss.mean().detach().item()
                 try:
-                    total_reconstr_loss += reconstruction_loss.sum().detach().item()
+                    total_reconstr_loss += reconstruction_loss.mean().detach().item()
                     total_reg_loss += reg_loss.detach().item()
                 except Exception as detach_error:
                     if reconstruction_loss:
@@ -330,8 +331,11 @@ class Pipeline:
                                                         stride_width=self.stride_width,
                                                         stride_depth=self.stride_depth,
                                                         logger=self.logger, is_validate=True)
+            sampler = torch.utils.data.RandomSampler(data_source=validation_set, replacement=True,
+                                                     num_samples=self.samples_per_epoch)
             data_loader = torch.utils.data.DataLoader(validation_set, batch_size=self.batch_size,
-                                                      shuffle=False, num_workers=self.num_worker)
+                                                      shuffle=False, num_workers=0,
+                                                      pin_memory=True, sampler=sampler)
         writer = self.writer_validating
         with torch.no_grad():
             for index, patches_batch in enumerate(tqdm(data_loader)):
