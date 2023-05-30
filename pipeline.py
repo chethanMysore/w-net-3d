@@ -342,12 +342,10 @@ class Pipeline:
                 self.logger.info("loading" + str(index))
 
                 local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
-                local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
                 try:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
-                        class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
+                        class_preds, reconstructed_patch = self.model(local_batch, ops="both")
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
