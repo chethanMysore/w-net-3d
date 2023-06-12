@@ -459,17 +459,15 @@ class Pipeline:
 
         for index, patches_batch in enumerate(tqdm(patch_loader)):
             local_batch = Pipeline.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-            local_batch_mask = Pipeline.normaliser(patches_batch['sampling_map'][tio.DATA].float().cuda())
-            local_batch_mask = local_batch_mask.expand((-1, self.num_classes, -1, -1, -1))
             locations = patches_batch[tio.LOCATION]
 
             with autocast(enabled=self.with_apex):
-                class_preds, reconstructed_patch = self.model(local_batch, local_batch_mask, ops="both")
+                class_preds, reconstructed_patch = self.model(local_batch, ops="both")
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                # ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
-                class_assignments = class_assignments.detach().type(local_batch.type())
-            aggregator1.add_batch(class_assignments, locations)
+                # class_assignments = class_assignments.detach().type(local_batch.type())
+            aggregator1.add_batch(class_preds, locations)
             aggregator2.add_batch(reconstructed_patch, locations)
 
         class_probs = aggregator1.get_output_tensor()
@@ -481,8 +479,8 @@ class Pipeline:
         torch.save(class_probs, os.path.join(result_root, subjectname + "_class_probs.pth"))
         torch.save(reconstructed_image, os.path.join(result_root, subjectname + "_recr.pth"))
 
-        save_nifti(class_probs.squeeze().numpy().astype(np.float32),
-                   os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
+        # save_nifti(class_probs.squeeze().numpy().astype(np.float32),
+        #            os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
         save_nifti(reconstructed_image.squeeze().numpy().astype(np.float32),
                    os.path.join(result_root, subjectname + "_recr.nii.gz"))
 
