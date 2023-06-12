@@ -465,6 +465,7 @@ class Pipeline:
                 class_preds, reconstructed_patch = self.model(local_batch, ops="both")
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
                 # ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                class_preds = class_preds.detach().type(local_batch.type())
                 reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
                 # class_assignments = class_assignments.detach().type(local_batch.type())
             aggregator1.add_batch(class_preds, locations)
