@@ -490,7 +490,7 @@ class Pipeline:
         sub_dict = {
             "img": tio.ScalarImage(image_path),
             "subjectname": image_name,
-            "sampling_map": tio.Image(image_path.split('.')[0] + '_mask.nii.gz', type=tio.SAMPLING_MAP)
+            # "sampling_map": tio.Image(image_path.split('.')[0] + '_mask.nii.gz', type=tio.SAMPLING_MAP)
         }
 
         if bool(label_path):
