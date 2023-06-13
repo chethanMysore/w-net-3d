@@ -30,10 +30,12 @@ class ConvBlock(nn.Module):
             nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.PReLU(num_parameters=out_channels, init=0.25),
+            nn.Dropout3d(),
             nn.BatchNorm3d(num_features=out_channels),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.PReLU(num_parameters=out_channels, init=0.25),
+            nn.Dropout3d(),
             nn.BatchNorm3d(num_features=out_channels))
 
     def forward(self, x):
@@ -54,12 +56,14 @@ class SeparableConvBlock(nn.Module):
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.PReLU(num_parameters=out_channels, init=0.25),
+            nn.Dropout3d(),
             nn.BatchNorm3d(num_features=out_channels),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=1,
                       bias=bias),
             nn.Conv3d(in_channels=out_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding, bias=bias),
             nn.PReLU(num_parameters=out_channels, init=0.25),
+            nn.Dropout3d(),
             nn.BatchNorm3d(num_features=out_channels))
 
     def forward(self, x):
