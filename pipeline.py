@@ -43,6 +43,7 @@ class Pipeline:
             self.optimizer = MTAdam(model.parameters(), lr=cmd_args.learning_rate)
         else:
             self.optimizer = torch.optim.Adam(model.parameters(), lr=cmd_args.learning_rate)
+        self.use_mtadam = cmd_args.use_mtadam
         self.num_epochs = cmd_args.num_epochs
         self.writer_training = writer_training
         self.writer_validating = writer_validating
@@ -237,20 +238,27 @@ class Pipeline:
                     reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
                     loss = soft_ncut_loss + reconstruction_loss
 
-                    if type(loss.tolist()) is list:
-                        for i in range(len(loss)):
-                            if i + 1 == len(loss):  # final loss
-                                self.scaler.scale(loss[i]).backward()
-                            else:
-                                self.scaler.scale(loss[i]).backward(retain_graph=True)
-                        loss = torch.mean(loss)
+                    if self.use_mtadam:
+                        if self.clip_grads:
+                            self.scaler.unscale_(self.optimizer)
+                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                        self.scaler.step(self.optimizer, [soft_ncut_loss, reconstruction_loss],
+                                         [self.s_ncut_loss_coeff, self.reconstr_loss_coeff])
                     else:
-                        self.scaler.scale(loss).backward()
-                    # self.scaler.scale(loss).backward()
-                    if self.clip_grads:
-                        self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                    self.scaler.step(self.optimizer)
+                        if type(loss.tolist()) is list:
+                            for i in range(len(loss)):
+                                if i + 1 == len(loss):  # final loss
+                                    self.scaler.scale(loss[i]).backward()
+                                else:
+                                    self.scaler.scale(loss[i]).backward(retain_graph=True)
+                            loss = torch.mean(loss)
+                        else:
+                            self.scaler.scale(loss).backward()
+                        # self.scaler.scale(loss).backward()
+                        if self.clip_grads:
+                            self.scaler.unscale_(self.optimizer)
+                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                        self.scaler.step(self.optimizer)
                     self.scaler.update()
                 torch.cuda.empty_cache()
 
