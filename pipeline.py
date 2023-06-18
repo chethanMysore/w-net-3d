@@ -239,11 +239,12 @@ class Pipeline:
                     loss = soft_ncut_loss + reconstruction_loss
 
                     if self.use_mtadam:
+                        self.scaler.step(self.optimizer, [self.scaler.scale(soft_ncut_loss),
+                                                          self.scaler.scale(reconstruction_loss)],
+                                         [self.s_ncut_loss_coeff, self.reconstr_loss_coeff])
                         if self.clip_grads:
                             self.scaler.unscale_(self.optimizer)
                             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                        self.scaler.step(self.optimizer, [soft_ncut_loss, reconstruction_loss],
-                                         [self.s_ncut_loss_coeff, self.reconstr_loss_coeff])
                     else:
                         if type(loss.tolist()) is list:
                             for i in range(len(loss)):
