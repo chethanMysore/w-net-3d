@@ -47,7 +47,7 @@ class MTAdam(Optimizer):
     # assuming feature_map has requires_grad=True)
     # compared to adam, these are the added objects: loss_array, ranks, feature_map,
     @torch.no_grad()
-    def step(self, loss_array, ranks, feature_map, closure=None):
+    def step(self, loss_array, ranks, closure=None):
         """Performs a single optimization step.
 
         Arguments:
