@@ -82,7 +82,7 @@ class Pipeline:
         # self.soft_ncut_loss = torch.nn.DataParallel(
         #     SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX))
         # self.soft_ncut_loss.cuda()
-        self.soft_ncut_loss = SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX)
+        # self.soft_ncut_loss = SoftNCutsLoss(radius=self.radius, sigma_i=self.sigmaI, sigma_x=self.sigmaX)
         # self.ssim = ssim  # structural_similarity_index_measure
         # self.ssim = structural_similarity_index_measure
         # self.reconstruction_loss = torch.nn.DataParallel(
