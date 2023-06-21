@@ -238,7 +238,7 @@ class Pipeline:
                     reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
                     loss = soft_ncut_loss + reconstruction_loss
 
-                    if self.use_mtadam:
+                    if str(self.use_mtadam).lower() == "true":
                         self.optimizer.step([soft_ncut_loss, reconstruction_loss],
                                             [self.s_ncut_loss_coeff, self.reconstr_loss_coeff])
                     else:
