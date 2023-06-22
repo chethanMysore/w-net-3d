@@ -314,6 +314,9 @@ class Pipeline:
 
             # Calculate the average loss per batch in one epoch
             # total_soft_ncut_loss /= (num_batches + 1.0)
+
+            total_similarity_loss /= (num_batches + 1.0)
+            total_continuity_loss /= (num_batches + 1.0)
             total_reconstr_loss /= (num_batches + 1.0)
             total_reg_loss /= (num_batches + 1.0)
             total_loss /= (num_batches + 1.0)
@@ -531,12 +534,10 @@ class Pipeline:
             with autocast(enabled=self.with_apex):
                 class_preds, reconstructed_patch = self.model(local_batch, ops="both")
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                # ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
-                class_preds = class_preds.detach().type(local_batch.type())
+                ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
-                # class_assignments = class_assignments.detach().type(local_batch.type())
-            aggregator1.add_batch(class_preds, locations)
-            # aggregator1.add_batch(class_assignments, locations)
+                class_assignments = class_assignments.detach().type(local_batch.type())
+            aggregator1.add_batch(class_assignments, locations)
             aggregator2.add_batch(reconstructed_patch, locations)
 
         class_probs = aggregator1.get_output_tensor()
