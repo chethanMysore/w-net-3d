@@ -148,8 +148,10 @@ class SRDataset(Dataset):
             n_depth_us, n_length_us, n_width_us = header_shape_us[3], header_shape_us[2], header_shape_us[1]
 
             if self.pre_load:
+                img_data = imageFile.data
+                img_data = torch.where((img_data < 135.0), 0.0, img_data)
                 pre_loaded_img = np.append(pre_loaded_img,
-                                           {'subjectname': imageFileName, 'data': imageFile.data})
+                                           {'subjectname': imageFileName, 'data': img_data})
                 if label_dir_path is not None:
                     pre_loaded_lbl = np.append(pre_loaded_lbl,
                                                {'subjectname': labelFileName, 'data': labelFile.data})
