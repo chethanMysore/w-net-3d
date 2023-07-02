@@ -493,9 +493,11 @@ class Pipeline:
 
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
+        img_data = tio.ScalarImage(image_path)
+        img_data.data = torch.where((img_data.data) < 135.0, 0.0, img_data.data)
 
         sub_dict = {
-            "img": tio.ScalarImage(image_path),
+            "img": img_data,
             "subjectname": image_name,
             # "sampling_map": tio.Image(image_path.split('.')[0] + '_mask.nii.gz', type=tio.SAMPLING_MAP)
         }
