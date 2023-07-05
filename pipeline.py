@@ -112,6 +112,8 @@ class Pipeline:
             training_set = SRDataset(logger=logger, patch_size=self.patch_size,
                                      dir_path=self.DATASET_PATH + '/train/',
                                      label_dir_path=self.label_dir_path_train,
+                                     output_path=self.OUTPUT_PATH,
+                                     model_name=self.model_name,
                                      stride_depth=self.stride_depth, stride_length=self.stride_length,
                                      stride_width=self.stride_width, fly_under_percent=None,
                                      patch_size_us=self.patch_size, pre_interpolate=None, norm_data=False,
@@ -124,6 +126,8 @@ class Pipeline:
                                                             sampler=sampler, pin_memory=True)
             validation_set = Pipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/validate/',
                                                         label_dir_path=self.label_dir_path_val,
+                                                        output_path=self.OUTPUT_PATH,
+                                                        model_name=self.model_name,
                                                         patch_size=self.patch_size,
                                                         stride_length=self.stride_length,
                                                         stride_width=self.stride_width,
@@ -136,12 +140,14 @@ class Pipeline:
                                                                pin_memory=True, sampler=sampler)
 
     @staticmethod
-    def create_tio_sub_ds(patch_size, dir_path, stride_length, stride_width, stride_depth, logger, is_validate=False,
+    def create_tio_sub_ds(patch_size, dir_path, stride_length, stride_width, stride_depth, logger, output_path, model_name, is_validate=False,
                           get_subjects_only=False, label_dir_path=None):
         if is_validate:
             validation_ds = SRDataset(logger=logger, patch_size=patch_size,
                                       dir_path=dir_path,
                                       label_dir_path=label_dir_path,
+                                      output_path=output_path,
+                                      model_name=model_name,
                                       stride_depth=stride_depth, stride_length=stride_length,
                                       stride_width=stride_width, fly_under_percent=None,
                                       patch_size_us=patch_size, pre_interpolate=None, norm_data=False,
@@ -333,6 +339,8 @@ class Pipeline:
         except Exception as error:
             validation_set = Pipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/validate/',
                                                         label_dir_path=self.label_dir_path_val,
+                                                        output_path=self.OUTPUT_PATH,
+                                                        model_name=self.model_name,
                                                         patch_size=self.patch_size,
                                                         stride_length=self.stride_length,
                                                         stride_width=self.stride_width,

@@ -17,6 +17,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 
 from utils.customutils import createCenterRatioMask, performUndersampling
+from utils.results_analyser import save_nifti
 
 __author__ = "Soumick Chatterjee, Chompunuch Sarasaen"
 __copyright__ = "Copyright 2020, Faculty of Computer Science, Otto von Guericke University Magdeburg, Germany"
@@ -34,7 +35,7 @@ seed(2020)
 
 class SRDataset(Dataset):
 
-    def __init__(self, logger, patch_size, dir_path, stride_depth=16, stride_length=32, stride_width=32,
+    def __init__(self, logger, patch_size, dir_path, output_path, model_name, stride_depth=16, stride_length=32, stride_width=32,
                  label_dir_path=None, size=None, fly_under_percent=None, patch_size_us=None, return_coords=False,
                  pad_patch=True, pre_interpolate=None, norm_data=True, pre_load=False, files_us=None):
         self.label_dir_path = label_dir_path
@@ -72,6 +73,8 @@ class SRDataset(Dataset):
         pre_loaded_lbl = np.delete(pre_loaded_lbl, 0)
         pre_loaded_img = np.delete(pre_loaded_img, 0)
         pre_loaded_lbl_mip = np.delete(pre_loaded_lbl_mip, 0)
+        result_root = os.path.join(output_path, model_name, "results")
+        os.makedirs(result_root, exist_ok=True)
 
         if not self.norm_data:
             print("No Norm")  # TODO remove
@@ -148,8 +151,13 @@ class SRDataset(Dataset):
             n_depth_us, n_length_us, n_width_us = header_shape_us[3], header_shape_us[2], header_shape_us[1]
 
             if self.pre_load:
-                img_data = imageFile.data
-                img_data = torch.where((img_data < 135.0), 0.0, img_data)
+                img_data = imageFile.data.type(torch.float64)
+                bins = torch.arange(img_data.min(), img_data.max() + 2, dtype=torch.float64)
+                histogram, bin_edges = torch.histogram(img_data, bins)
+                init_threshold = bin_edges[int(len(bins) - 0.97 * len(bins))]
+                img_data = torch.where((img_data <= init_threshold), 0.0, img_data)
+                save_nifti(img_data.squeeze().numpy().astype(np.float32),
+                           os.path.join(result_root, imageFileName.split("\\")[-1].split(".")[0] + "_init_thresholded.nii.gz"))
                 pre_loaded_img = np.append(pre_loaded_img,
                                            {'subjectname': imageFileName, 'data': img_data})
                 if label_dir_path is not None:
