@@ -151,10 +151,11 @@ class SRDataset(Dataset):
             n_depth_us, n_length_us, n_width_us = header_shape_us[3], header_shape_us[2], header_shape_us[1]
 
             if self.pre_load:
-                img_data = imageFile.data.type(torch.float64)
+                img_data = imageFile.data.numpy().astype(np.float64)
                 bins = torch.arange(img_data.min(), img_data.max() + 2, dtype=torch.float64)
-                histogram, bin_edges = torch.histogram(img_data, bins)
+                histogram, bin_edges = np.histogram(img_data, int(img_data.max() + 2))
                 init_threshold = bin_edges[int(len(bins) - 0.97 * len(bins))]
+                img_data = torch.from_numpy(img_data).type(torch.float64)
                 img_data = torch.where((img_data <= init_threshold), 0.0, img_data)
                 save_nifti(img_data.squeeze().numpy().astype(np.float32),
                            os.path.join(result_root, imageFileName.split("\\")[-1].split(".")[0] + "_init_thresholded.nii.gz"))
