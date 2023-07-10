@@ -503,6 +503,7 @@ class Pipeline:
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
         img_data = tio.ScalarImage(image_path)
+        img_data.data = img_data.data.type(torch.float64)
         temp_data = img_data.data.numpy().astype(np.float64)
         bins = torch.arange(temp_data.min(), temp_data.max() + 2, dtype=torch.float64)
         histogram, bin_edges = np.histogram(temp_data, int(temp_data.max() + 2))
