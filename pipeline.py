@@ -476,13 +476,14 @@ class Pipeline:
 
             with autocast(enabled=self.with_apex):
                 class_preds, reconstructed_patch = self.model(local_batch, ops="both")
-                # reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                # ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 class_preds = class_preds.detach().type(local_batch.type())
                 reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
-                # class_assignments = class_assignments.detach().type(local_batch.type())
-            aggregator1.add_batch(class_preds, locations)
-            # aggregator1.add_batch(class_assignments, locations)
+                ignore = ignore.detach()
+                class_assignments = class_assignments.detach().type(local_batch.type())
+            # aggregator1.add_batch(class_preds, locations)
+            aggregator1.add_batch(class_assignments, locations)
             aggregator2.add_batch(reconstructed_patch, locations)
 
         class_probs = aggregator1.get_output_tensor()
@@ -502,7 +503,11 @@ class Pipeline:
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
         img_data = tio.ScalarImage(image_path)
-        img_data.data = torch.where((img_data.data) < 135.0, 0.0, img_data.data)
+        temp_data = img_data.data.numpy().astype(np.float64)
+        bins = torch.arange(temp_data.min(), temp_data.max() + 2, dtype=torch.float64)
+        histogram, bin_edges = np.histogram(temp_data, int(temp_data.max() + 2))
+        init_threshold = bin_edges[int(len(bins) - 0.97 * len(bins))]
+        img_data.data = torch.where((img_data.data) <= init_threshold, 0.0, img_data.data)
 
         sub_dict = {
             "img": img_data,
