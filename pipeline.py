@@ -465,8 +465,8 @@ class Pipeline:
             overlap,
         )
 
-        aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
-        aggregator2 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+        aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="crop")
+        # aggregator2 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
         patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
                                                    num_workers=self.num_worker)
 
@@ -475,30 +475,30 @@ class Pipeline:
             locations = patches_batch[tio.LOCATION]
 
             with autocast(enabled=self.with_apex):
-                class_preds, reconstructed_patch = self.model(local_batch, ops="both")
-                reconstructed_patch = torch.sigmoid(reconstructed_patch)
+                class_preds = self.model(local_batch, ops="enc")
+                # reconstructed_patch = torch.sigmoid(reconstructed_patch)
                 ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 class_preds = class_preds.detach().type(local_batch.type())
-                reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
+                # reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
                 ignore = ignore.detach()
                 class_assignments = class_assignments.detach().type(local_batch.type())
             # aggregator1.add_batch(class_preds, locations)
             aggregator1.add_batch(class_assignments, locations)
-            aggregator2.add_batch(reconstructed_patch, locations)
+            # aggregator2.add_batch(reconstructed_patch, locations)
 
         class_probs = aggregator1.get_output_tensor()
-        reconstructed_image = aggregator2.get_output_tensor()
+        # reconstructed_image = aggregator2.get_output_tensor()
 
         # to avoid memory errors
         torch.cuda.empty_cache()
 
         torch.save(class_probs, os.path.join(result_root, subjectname + "_class_probs.pth"))
-        torch.save(reconstructed_image, os.path.join(result_root, subjectname + "_recr.pth"))
+        # torch.save(reconstructed_image, os.path.join(result_root, subjectname + "_recr.pth"))
 
         # save_nifti(class_probs.squeeze().numpy().astype(np.float32),
         #            os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
-        save_nifti(reconstructed_image.squeeze().numpy().astype(np.float32),
-                   os.path.join(result_root, subjectname + "_recr.nii.gz"))
+        # save_nifti(reconstructed_image.squeeze().numpy().astype(np.float32),
+        #            os.path.join(result_root, subjectname + "_recr.nii.gz"))
 
     def predict(self, image_path, label_path, predict_logger):
         image_name = os.path.basename(image_path).split('.')[0]
