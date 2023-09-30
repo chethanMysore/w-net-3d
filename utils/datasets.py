@@ -18,6 +18,7 @@ from torch.utils.data import Dataset
 
 from utils.customutils import createCenterRatioMask, performUndersampling
 from utils.results_analyser import save_nifti
+from skimage.filters import threshold_otsu
 
 __author__ = "Soumick Chatterjee, Chompunuch Sarasaen"
 __copyright__ = "Copyright 2020, Faculty of Computer Science, Otto von Guericke University Magdeburg, Germany"
@@ -136,7 +137,7 @@ class SRDataset(Dataset):
 
                 labelFile = tio.LabelMap(
                     labelFileName)  # shape (Length X Width X Depth X Channels) - changed to label file name as input image can have different (lower) size
-                labelFile_data = nibabel.load(labelFileName).get_data()
+                labelFile_data = nibabel.load(labelFileName).get_fdata()
                 labelFile_mip = torch.from_numpy(labelFile_data).float()
                 labelFile_mip = torch.amax(labelFile_mip, -1)
                 header_shape = labelFile.data.shape
@@ -155,12 +156,14 @@ class SRDataset(Dataset):
                 bins = torch.arange(img_data.min(), img_data.max() + 2, dtype=torch.float64)
                 histogram, bin_edges = np.histogram(img_data, int(img_data.max() + 2))
                 init_threshold = bin_edges[int(len(bins) - 0.97 * len(bins))]
+                img_data = np.where((img_data <= init_threshold), 0.0, img_data)
+                norm_img_data = img_data / img_data.max()
+                otsu_thresh = threshold_otsu(norm_img_data)
                 img_data = torch.from_numpy(img_data).type(torch.float64)
-                img_data = torch.where((img_data <= init_threshold), 0.0, img_data)
                 save_nifti(img_data.squeeze().numpy().astype(np.float32),
-                           os.path.join(result_root, imageFileName.split("\\")[-1].split(".")[0] + "_init_thresholded.nii.gz"))
+                           os.path.join(result_root, imageFileName.replace("\\", "/").split("/")[-1].split(".")[0] + "_init_thresholded.nii.gz"))
                 pre_loaded_img = np.append(pre_loaded_img,
-                                           {'subjectname': imageFileName, 'data': img_data})
+                                           {'subjectname': imageFileName, 'data': img_data, 'otsu_thresh': otsu_thresh})
                 if label_dir_path is not None:
                     pre_loaded_lbl = np.append(pre_loaded_lbl,
                                                {'subjectname': labelFileName, 'data': labelFile.data})
@@ -386,15 +389,19 @@ class SRDataset(Dataset):
                     pad_us += pad_dim
             pad = pad_us
             patch = F.pad(patch, pad_us[:6], value=np.finfo(
-                np.float).eps)  # tuple has to be reveresed before using it for padding.
+                float).eps)  # tuple has to be reveresed before using it for padding.
             # As the tuple contains in DHW manner, and input is needed as WHD mannger TODO input already in WXLXD
             if self.label_dir_path is not None:
-                targetPatch = F.pad(targetPatch, pad[:6], value=np.finfo(np.float).eps)
+                targetPatch = F.pad(targetPatch, pad[:6], value=np.finfo(float).eps)
 
         if self.return_coords is True:
             if self.label_dir_path is not None:
                 trimmed_label_filename = (self.data.iloc[index, 3]).split("\\")
                 trimmed_label_filename = trimmed_label_filename[len(trimmed_label_filename) - 1]
+                trimmed_filename = (self.data.iloc[index, 0]).split("\\")
+                trimmed_filename = trimmed_filename[len(trimmed_filename) - 1]
+                otsu_thresh = [img for img in self.pre_loaded_data['pre_loaded_img'] if
+                               trimmed_filename in img['subjectname']][0]['otsu_thresh']
                 ground_truth_mip = [lbl for lbl in self.pre_loaded_data['pre_loaded_lbl_mip'] if
                                     lbl['subjectname'] == trimmed_label_filename][0]['data']
                 ground_truth_mip_patch = ground_truth_mip[startIndex_width:startIndex_width + self.patch_size,
@@ -406,18 +413,24 @@ class SRDataset(Dataset):
                     pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
                     pad += pad_dim
                 ground_truth_mip_patch = torch.nn.functional.pad(ground_truth_mip_patch, pad[:6],
-                                                                 value=np.finfo(np.float).eps)
+                                                                 value=np.finfo(float).eps)
                 subject = tio.Subject(
                     img=tio.ScalarImage(tensor=patch),
                     label=tio.LabelMap(tensor=targetPatch),
                     subjectname=trimmed_label_filename.split(".")[0],
                     ground_truth_mip_patch=ground_truth_mip_patch,
-                    start_coords=start_coords
+                    start_coords=start_coords,
+                    otsu_thresh=otsu_thresh
                 )
             else:
+                trimmed_filename = (self.data.iloc[index, 0]).split("\\")
+                trimmed_filename = trimmed_filename[len(trimmed_filename) - 1]
+                otsu_thresh = [img for img in self.pre_loaded_data['pre_loaded_img'] if
+                               trimmed_filename in img['subjectname']][0]['otsu_thresh']
                 subject = tio.Subject(
                     img=tio.ScalarImage(tensor=patch),
-                    start_coords=start_coords
+                    start_coords=start_coords,
+                    otsu_thresh=otsu_thresh
                 )
             return subject
         else:
