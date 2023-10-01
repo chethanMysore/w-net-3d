@@ -465,7 +465,7 @@ class Pipeline:
             overlap,
         )
 
-        aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="crop")
+        aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
         # aggregator2 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
         patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
                                                    num_workers=self.num_worker)
@@ -504,6 +504,7 @@ class Pipeline:
         image_name = os.path.basename(image_path).split('.')[0]
         img_data = tio.ScalarImage(image_path)
         img_data.data = img_data.data.type(torch.float64)
+        # img_data.data = torch.where((img_data.data) < 135.0, 0.0, img_data.data)
         temp_data = img_data.data.numpy().astype(np.float64)
         bins = torch.arange(temp_data.min(), temp_data.max() + 2, dtype=torch.float64)
         histogram, bin_edges = np.histogram(temp_data, int(temp_data.max() + 2))
