@@ -31,7 +31,7 @@ def min_max(array):
     return (array - array.min()) / (array.max() - array.min())
 
 
-def write_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, total_loss=0):
+def write_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, mip_loss=0, total_loss=0):
     """
     Method to write summary to the tensorboard.
     index: global_index for the visualisation
@@ -41,10 +41,11 @@ def write_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, total_
     print('Writing Summary...')
     writer.add_scalar('SoftNcutLoss', soft_ncut_loss, index)
     writer.add_scalar('ReconstructionLoss', reconstruction_loss, index)
+    writer.add_scalar('MIP-Loss', mip_loss, index)
     writer.add_scalar('TotalLoss', total_loss, index)
 
 
-def write_epoch_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, reg_loss=0, total_loss=0):
+def write_epoch_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, mip_loss=0, reg_loss=0, total_loss=0):
     """
     Method to write summary to the tensorboard.
     index: global_index for the visualisation
@@ -53,6 +54,7 @@ def write_epoch_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, 
     print('Writing Epoch Summary...')
     writer.add_scalar('SoftNcutLossPerEpoch', soft_ncut_loss, index)
     writer.add_scalar('ReconstructionLossPerEpoch', reconstruction_loss, index)
+    writer.add_scalar('MIP-LossPerEpoch', mip_loss, index)
     writer.add_scalar('RegularisationLossPerEpoch', reg_loss, index)
     writer.add_scalar('TotalLossPerEpoch', total_loss, index)
 

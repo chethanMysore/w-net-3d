@@ -139,6 +139,10 @@ if __name__ == '__main__':
                         type=float,
                         default=1.0,
                         help="loss coefficient for reconstruction loss")
+    parser.add_argument("-mip_loss_coeff",
+                        type=float,
+                        default=0.3,
+                        help="loss coefficient for maximum intensity projection loss")
     parser.add_argument("-reg_alpha",
                         type=float,
                         default=0.001,
@@ -164,6 +168,9 @@ if __name__ == '__main__':
     parser.add_argument("-train_encoder_only",
                         default=False,
                         help="Set this to true to include wandb logging")
+    parser.add_argument("-with_mip",
+                        default=True,
+                        help="Set this to true to train with mip loss")
     parser.add_argument("-use_madam",
                         default=False,
                         help="Set this to true to use madam optimizer")

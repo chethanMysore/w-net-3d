@@ -36,11 +36,11 @@ class SoftNCutsLoss_v1(nn.Module):
         meshgrid_y = torch.reshape(meshgrid_y, (length * width * depth,))
         meshgrid_z = torch.reshape(meshgrid_z, (length * width * depth,))
         A_x = SoftNCutsLoss_v1._outer_product(meshgrid_x, torch.ones(meshgrid_x.size(), dtype=meshgrid_x.dtype,
-                                                                  device=meshgrid_x.device))
+                                                                     device=meshgrid_x.device))
         A_y = SoftNCutsLoss_v1._outer_product(meshgrid_y, torch.ones(meshgrid_y.size(), dtype=meshgrid_y.dtype,
-                                                                  device=meshgrid_y.device))
+                                                                     device=meshgrid_y.device))
         A_z = SoftNCutsLoss_v1._outer_product(meshgrid_z, torch.ones(meshgrid_z.size(), dtype=meshgrid_z.dtype,
-                                                                  device=meshgrid_z.device))
+                                                                     device=meshgrid_z.device))
 
         del meshgrid_x, meshgrid_y, meshgrid_z
 
@@ -108,10 +108,10 @@ class SoftNCutsLoss_v1(nn.Module):
         """
         k_class_prob = torch.reshape(k_class_prob, (-1,))
         return torch.sum(torch.multiply(weights, SoftNCutsLoss_v1._outer_product(k_class_prob,
-                                                                              torch.ones(k_class_prob.size(),
-                                                                                         dtype=k_class_prob.dtype,
-                                                                                         layout=k_class_prob.layout,
-                                                                                         device=k_class_prob.device))))
+                                                                                 torch.ones(k_class_prob.size(),
+                                                                                            dtype=k_class_prob.dtype,
+                                                                                            layout=k_class_prob.layout,
+                                                                                            device=k_class_prob.device))))
 
     def forward(self, patch, prob, k):
         """
@@ -131,8 +131,9 @@ class SoftNCutsLoss_v1(nn.Module):
 
         for t in range(k):
             soft_n_cut_loss = soft_n_cut_loss - (
-                    SoftNCutsLoss_v1._numerator(prob[:, :, :, t], weights) / SoftNCutsLoss_v1._denominator(prob[:, :, :, t],
-                                                                                                     weights))
+                    SoftNCutsLoss_v1._numerator(prob[:, :, :, t], weights) / SoftNCutsLoss_v1._denominator(
+                prob[:, :, :, t],
+                weights))
 
         del weights
         del flatten_patch
@@ -209,8 +210,9 @@ class SoftNCutsLoss_v2(nn.Module):
         for x in range((self.radius - 1) * 2 + 1):
             for y in range((self.radius - 1) * 2 + 1):
                 for z in range((self.radius - 1) * 2 + 1):
-                    temp_cropped_seg[:, :, :, :, :, x, y, z] = padded_preds[:, :, x:x + preds.size()[2], y:y + preds.size()[3],
-                                       z:z + preds.size()[4]]
+                    temp_cropped_seg[:, :, :, :, :, x, y, z] = padded_preds[:, :, x:x + preds.size()[2],
+                                                               y:y + preds.size()[3],
+                                                               z:z + preds.size()[4]]
         # cropped_seg = []
         # for x in torch.arange((self.radius - 1) * 2 + 1, dtype=torch.long):
         #     width = []
@@ -340,7 +342,7 @@ class SoftNCutsLoss(nn.Module):
             # Compute the average pixel value for this class, and the difference from each pixel
             class_probs = labels[:, k].unsqueeze(1)
             class_mean = torch.mean(inputs * class_probs, dim=(2, 3, 4), keepdim=True) / \
-                torch.add(torch.mean(class_probs, dim=(2, 3, 4), keepdim=True), 1e-5)
+                         torch.add(torch.mean(class_probs, dim=(2, 3, 4), keepdim=True), 1e-5)
             diff = (inputs - class_mean).pow(2).sum(dim=1).unsqueeze(1)
 
             # Weight the loss by the difference from the class average.
@@ -370,3 +372,21 @@ def l2_regularisation_loss(model):
         if 'weight' in name:
             l2_reg = l2_reg + param.norm(2)
     return l2_reg
+
+
+class FocalTverskyLoss(nn.Module):
+    def __init__(self, smooth=1, gamma=0.75, alpha=0.7):
+        super(FocalTverskyLoss, self).__init__()
+        self.smooth = smooth
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def forward(self, y_pred, y_true):
+        y_true_pos = torch.flatten(y_true)
+        y_pred_pos = torch.flatten(y_pred)
+        true_pos = torch.sum(y_true_pos * y_pred_pos)
+        false_neg = torch.sum(y_true_pos * (1 - y_pred_pos))
+        false_pos = torch.sum((1 - y_true_pos) * y_pred_pos)
+        pt_1 = (true_pos + self.smooth) / (
+                true_pos + self.alpha * false_neg + (1 - self.alpha) * false_pos + self.smooth)
+        return pow(abs(1 - pt_1), self.gamma)
