@@ -92,7 +92,8 @@ class Pipeline:
         # self.reconstruction_loss.cuda()
         self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
                                                       loss_type="L1")
-        self.mip_loss = FocalTverskyLoss()
+        # self.mip_loss = FocalTverskyLoss()
+        self.mip_loss = torch.nn.BCEWithLogitsLoss()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -241,7 +242,7 @@ class Pipeline:
                 mip_loss = torch.tensor(0.001).float().cuda()
                 with autocast(enabled=self.with_apex):
                     class_preds, reconstructed_patch = self.model(local_batch, ops="both")
-                    soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
+                    soft_ncut_loss = self.soft_ncut_loss(local_batch, torch.nn.functional.softmax(class_preds, dim=1))
                     soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
 
                     if self.with_mip:
@@ -250,7 +251,7 @@ class Pipeline:
                         # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                         for index, pred_patch_seg in enumerate(class_probs):
                             pred_patch_mip = torch.amax(pred_patch_seg, -1)
-                            mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
+                            mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip.squeeze(),
                                                                             patches_batch['ground_truth_mip_patch'][
                                                                                 index].float().cuda())
                         mip_loss = mip_loss / len(class_probs)
@@ -385,7 +386,7 @@ class Pipeline:
                     mip_loss = torch.tensor(0.001).float().cuda()
                     with autocast(enabled=self.with_apex):
                         class_preds, reconstructed_patch = self.model(local_batch, ops="both")
-                        soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
+                        soft_ncut_loss = self.soft_ncut_loss(local_batch, torch.nn.functional.softmax(class_preds, dim=1))
                         soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
 
                         if self.with_mip:
@@ -394,7 +395,7 @@ class Pipeline:
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                             for index, pred_patch_seg in enumerate(class_probs):
                                 pred_patch_mip = torch.amax(pred_patch_seg, -1)
-                                mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
+                                mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip.squeeze(),
                                                                                 patches_batch['ground_truth_mip_patch'][
                                                                                     index].float().cuda())
                             mip_loss = mip_loss / len(class_probs)
