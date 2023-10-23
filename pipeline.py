@@ -92,8 +92,10 @@ class Pipeline:
         # self.reconstruction_loss.cuda()
         self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
                                                       loss_type="L1")
-        self.mip_loss = FocalTverskyLoss()
-        # self.mip_loss = torch.nn.BCEWithLogitsLoss()
+        if str(cmd_args.use_FTLstr).lower() == "true":
+            self.mip_loss = FocalTverskyLoss()
+        else:
+            self.mip_loss = torch.nn.BCEWithLogitsLoss()
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
