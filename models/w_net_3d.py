@@ -238,6 +238,6 @@ class WNet3D(nn.Module):
         if ops == "dec":
             return reconstructed_op
         if ops == "both":
-            return encoder_op, reconstructed_op
+            return class_prob, reconstructed_op
         else:
             raise ValueError('Invalid ops, ops must be in [enc, dec, both]')
