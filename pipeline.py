@@ -8,6 +8,8 @@ import torch.utils.data
 import torchio as tio
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
+# from PIL import Image
+# from torchviz import make_dot
 
 from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisation_loss, FocalTverskyLoss)
 # from torchmetrics.functional import structural_similarity_index_measure
@@ -240,20 +242,25 @@ class Pipeline:
 
                 mip_loss = torch.tensor(0.001).float().cuda()
                 with autocast(enabled=self.with_apex):
-                    class_preds, reconstructed_patch = self.model(local_batch, ops="both")
+                    class_preds, feature_rep, reconstructed_patch = self.model(local_batch, ops="both")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                     soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
 
                     if self.with_mip:
                         # MIP Loss
-                        class_probs, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                        feature_rep = torch.sigmoid(feature_rep)
                         # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
-                        for index, pred_patch_seg in enumerate(class_probs):
+                        for index, pred_patch_seg in enumerate(feature_rep):
                             pred_patch_mip = torch.amax(pred_patch_seg, -1)
+                            # Image.fromarray((pred_patch_mip.squeeze().detach().cpu().numpy() * 255).astype('uint8'), 'L').save(
+                            #     os.path.join(self.OUTPUT_PATH, self.model_name + "_patch" + str(index) + "_pred_MIP.tif"))
+                            # Image.fromarray((patches_batch['ground_truth_mip_patch'][
+                            #                                                     index].float().squeeze().detach().cpu().numpy() * 255).astype('uint8'), 'L').save(
+                            #     os.path.join(self.OUTPUT_PATH, self.model_name + "_patch" + str(index) + "_true_MIP.tif"))
                             mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
                                                                             patches_batch['ground_truth_mip_patch'][
                                                                                 index].float().cuda())
-                        mip_loss = mip_loss / len(class_probs)
+                        mip_loss = mip_loss / len(feature_rep)
 
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
                     reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
@@ -261,6 +268,8 @@ class Pipeline:
                     reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
                     loss = soft_ncut_loss + mip_loss + reconstruction_loss
 
+                    # cg = make_dot(loss, params=dict(self.model.named_parameters()))
+                    # cg.render(os.path.join(self.OUTPUT_PATH, self.model_name + "cg.png"), format='png')
                     if str(self.use_mtadam).lower() == "true":
                         self.optimizer.step([soft_ncut_loss, reconstruction_loss],
                                             [self.s_ncut_loss_coeff, self.reconstr_loss_coeff])
@@ -384,20 +393,20 @@ class Pipeline:
                 try:
                     mip_loss = torch.tensor(0.001).float().cuda()
                     with autocast(enabled=self.with_apex):
-                        class_preds, reconstructed_patch = self.model(local_batch, ops="both")
+                        class_preds, feature_rep, reconstructed_patch = self.model(local_batch, ops="both")
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
 
                         if self.with_mip:
                             # MIP Loss
-                            class_probs, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                            feature_rep = torch.sigmoid(feature_rep)
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
-                            for index, pred_patch_seg in enumerate(class_probs):
+                            for index, pred_patch_seg in enumerate(feature_rep):
                                 pred_patch_mip = torch.amax(pred_patch_seg, -1)
                                 mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
                                                                                 patches_batch['ground_truth_mip_patch'][
                                                                                     index].float().cuda())
-                            mip_loss = mip_loss / len(class_probs)
+                            mip_loss = mip_loss / len(feature_rep)
 
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
@@ -515,15 +524,17 @@ class Pipeline:
             locations = patches_batch[tio.LOCATION]
 
             with autocast(enabled=self.with_apex):
-                class_preds = self.model(local_batch, ops="enc")
+                class_preds, feature_rep = self.model(local_batch, ops="enc")
+                feature_rep = torch.sigmoid(feature_rep)
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                # ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 class_preds = class_preds.detach().type(local_batch.type())
                 # reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
-                ignore = ignore.detach()
-                class_assignments = class_assignments.detach().type(local_batch.type())
+                # ignore = ignore.detach()
+                # class_assignments = class_assignments.detach().type(local_batch.type())
+                feature_rep = feature_rep.detach().type(local_batch.type())
             # aggregator1.add_batch(class_preds, locations)
-            aggregator1.add_batch(class_assignments, locations)
+            aggregator1.add_batch(feature_rep, locations)
             # aggregator2.add_batch(reconstructed_patch, locations)
 
         class_probs = aggregator1.get_output_tensor()
