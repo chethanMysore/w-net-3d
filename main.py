@@ -174,9 +174,6 @@ if __name__ == '__main__':
     parser.add_argument("-use_madam",
                         default=False,
                         help="Set this to true to use madam optimizer")
-    parser.add_argument("-use_FTL",
-                        default=False,
-                        help="Set this to true to use FocalTverskyLoss")
     parser.add_argument("-use_mtadam",
                         default=False,
                         help="Set this to true to use mTadam optimizer")
