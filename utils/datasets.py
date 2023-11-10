@@ -156,14 +156,12 @@ class SRDataset(Dataset):
                 bins = torch.arange(img_data.min(), img_data.max() + 2, dtype=torch.float64)
                 histogram, bin_edges = np.histogram(img_data, int(img_data.max() + 2))
                 init_threshold = bin_edges[int(len(bins) - 0.97 * len(bins))]
-                img_data = np.where((img_data <= init_threshold), 0.0, img_data)
-                norm_img_data = img_data / img_data.max()
-                otsu_thresh = threshold_otsu(norm_img_data)
                 img_data = torch.from_numpy(img_data).type(torch.float64)
+                img_data = torch.where((img_data <= init_threshold), 0.0, img_data)
                 save_nifti(img_data.squeeze().numpy().astype(np.float32),
                            os.path.join(result_root, imageFileName.replace("\\", "/").split("/")[-1].split(".")[0] + "_init_thresholded.nii.gz"))
                 pre_loaded_img = np.append(pre_loaded_img,
-                                           {'subjectname': imageFileName, 'data': img_data, 'otsu_thresh': otsu_thresh})
+                                           {'subjectname': imageFileName, 'data': img_data})
                 if label_dir_path is not None:
                     pre_loaded_lbl = np.append(pre_loaded_lbl,
                                                {'subjectname': labelFileName, 'data': labelFile.data})
@@ -400,8 +398,7 @@ class SRDataset(Dataset):
                 trimmed_label_filename = trimmed_label_filename[len(trimmed_label_filename) - 1]
                 trimmed_filename = (self.data.iloc[index, 0]).split("\\")
                 trimmed_filename = trimmed_filename[len(trimmed_filename) - 1]
-                otsu_thresh = [img for img in self.pre_loaded_data['pre_loaded_img'] if
-                               trimmed_filename in img['subjectname']][0]['otsu_thresh']
+
                 ground_truth_mip = [lbl for lbl in self.pre_loaded_data['pre_loaded_lbl_mip'] if
                                     lbl['subjectname'] == trimmed_label_filename][0]['data']
                 ground_truth_mip_patch = ground_truth_mip[startIndex_width:startIndex_width + self.patch_size,
@@ -419,18 +416,15 @@ class SRDataset(Dataset):
                     label=tio.LabelMap(tensor=targetPatch),
                     subjectname=trimmed_label_filename.split(".")[0],
                     ground_truth_mip_patch=ground_truth_mip_patch,
-                    start_coords=start_coords,
-                    otsu_thresh=otsu_thresh
+                    start_coords=start_coords
                 )
             else:
                 trimmed_filename = (self.data.iloc[index, 0]).split("\\")
                 trimmed_filename = trimmed_filename[len(trimmed_filename) - 1]
-                otsu_thresh = [img for img in self.pre_loaded_data['pre_loaded_img'] if
-                               trimmed_filename in img['subjectname']][0]['otsu_thresh']
+
                 subject = tio.Subject(
                     img=tio.ScalarImage(tensor=patch),
-                    start_coords=start_coords,
-                    otsu_thresh=otsu_thresh
+                    start_coords=start_coords
                 )
             return subject
         else:
