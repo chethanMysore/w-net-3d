@@ -8,8 +8,10 @@ import torch.utils.data
 import torchio as tio
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
+# from PIL import Image
+# from torchviz import make_dot
 
-from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisation_loss)
+from evaluation.metrics import (SoftNCutsLoss, ReconstructionLoss, l2_regularisation_loss, ContinuityLoss)
 # from torchmetrics.functional import structural_similarity_index_measure
 # from pytorch_msssim import ssim
 from utils.results_analyser import *
@@ -72,6 +74,7 @@ class Pipeline:
         # Losses
         self.s_ncut_loss_coeff = cmd_args.s_ncut_loss_coeff
         self.reconstr_loss_coeff = cmd_args.reconstr_loss_coeff
+        self.cont_loss_coeff = cmd_args.cont_loss_coeff
         self.reg_alpha = cmd_args.reg_alpha
 
         # Following metrics can be used to evaluate
@@ -90,6 +93,7 @@ class Pipeline:
         # self.reconstruction_loss.cuda()
         self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
                                                       loss_type="L1")
+        self.continuity_loss = ContinuityLoss(self.batch_size, self.patch_size, 1)
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -221,6 +225,7 @@ class Pipeline:
             print("Train Epoch: " + str(epoch) + " of " + str(self.num_epochs))
             self.model.train()
             total_soft_ncut_loss = 0
+            total_cont_loss = 0
             total_reconstr_loss = 0
             total_reg_loss = 0
             total_loss = 0
@@ -235,14 +240,17 @@ class Pipeline:
                 self.optimizer.zero_grad()
 
                 with autocast(enabled=self.with_apex):
-                    class_preds, reconstructed_patch = self.model(local_batch, ops="both")
+                    class_preds, feature_rep, reconstructed_patch = self.model(local_batch, ops="both")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                     soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
+                    cont_loss = self.cont_loss_coeff * self.continuity_loss(feature_rep)
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
                     reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
                                                                                               local_batch)
                     reg_loss = self.reg_alpha * l2_regularisation_loss(self.model)
-                    loss = soft_ncut_loss + reconstruction_loss
+                    loss = soft_ncut_loss + cont_loss + reconstruction_loss
+                    # cg = make_dot(loss, params=dict(self.model.named_parameters()))
+                    # cg.render(os.path.join(self.OUTPUT_PATH, self.model_name + "cg.png"), format='png')
 
                     if str(self.use_mtadam).lower() == "true":
                         self.optimizer.step([soft_ncut_loss, reconstruction_loss],
@@ -269,6 +277,7 @@ class Pipeline:
 
                 # Initialising the average loss metrics
                 total_soft_ncut_loss += soft_ncut_loss.mean().detach().item()
+                total_cont_loss += cont_loss.mean().detach().item()
                 try:
                     total_reconstr_loss += reconstruction_loss.mean().detach().item()
                     total_reg_loss += reg_loss.detach().item()
@@ -289,30 +298,37 @@ class Pipeline:
                 num_batches += 1
 
                 self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
-                                 "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
-                                 str(reconstruction_loss) + " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
+                                 "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ContLoss: " + str(cont_loss) +
+                                 " ReconstructionLoss: " + str(reconstruction_loss) +
+                                 " reg_loss: " + str(reg_loss) + " total_loss: " + str(loss))
                 # To avoid memory errors
                 torch.cuda.empty_cache()
 
             # Calculate the average loss per batch in one epoch
             total_soft_ncut_loss /= (num_batches + 1.0)
+            total_cont_loss /= (num_batches + 1.0)
             total_reconstr_loss /= (num_batches + 1.0)
             total_reg_loss /= (num_batches + 1.0)
             total_loss /= (num_batches + 1.0)
 
             # Print every epoch
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
-                             "\n SoftNcutLoss: " + str(total_soft_ncut_loss) + " ReconstructionLoss: " +
-                             str(total_reconstr_loss) + " reg_loss: " + str(total_reg_loss) +
+                             "\n SoftNcutLoss: " + str(total_soft_ncut_loss) +
+                             " ContLoss: " + str(total_cont_loss) +
+                             " ReconstructionLoss: " + str(total_reconstr_loss) +
+                             " reg_loss: " + str(total_reg_loss) +
                              " total_loss: " + str(total_loss))
             write_epoch_summary(writer=self.writer_training, index=epoch,
                                 soft_ncut_loss=total_soft_ncut_loss,
+                                cont_loss=total_cont_loss,
                                 reconstruction_loss=total_reconstr_loss,
                                 reg_loss=total_reg_loss,
                                 total_loss=total_loss)
             if self.wandb is not None:
                 self.wandb.log(
-                    {"SoftNcutLoss_train": total_soft_ncut_loss, "ReconstructionLoss_train": total_reconstr_loss,
+                    {"SoftNcutLoss_train": total_soft_ncut_loss,
+                     "ContinuityLoss_train": total_cont_loss,
+                     "ReconstructionLoss_train": total_reconstr_loss,
                      "total_reg_loss_train": total_reg_loss, "total_loss_train": total_loss}, step=epoch)
 
             torch.cuda.empty_cache()  # to avoid memory errors
@@ -331,7 +347,7 @@ class Pipeline:
         self.logger.debug('Validating...')
         print("Validate Epoch: " + str(epoch) + " of " + str(self.num_epochs))
 
-        total_soft_ncut_loss, total_reconstr_loss, total_loss = 0, 0, 0
+        total_soft_ncut_loss, total_cont_loss, total_reconstr_loss, total_loss = 0, 0, 0, 0
         no_patches = 0
         self.model.eval()
         try:
@@ -360,15 +376,16 @@ class Pipeline:
                 try:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
-                        class_preds, reconstructed_patch = self.model(local_batch, ops="both")
+                        class_preds, feature_rep, reconstructed_patch = self.model(local_batch, ops="both")
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
+                        cont_loss = self.cont_loss_coeff * self.continuity_loss(feature_rep)
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
                                                                                                   local_batch)
 
                         if not str(self.train_encoder_only).lower() == "true":
-                            loss = soft_ncut_loss + reconstruction_loss
+                            loss = soft_ncut_loss + cont_loss + reconstruction_loss
                         else:
                             loss = soft_ncut_loss
                         torch.cuda.empty_cache()
@@ -377,31 +394,39 @@ class Pipeline:
                     self.logger.exception(error)
 
                 total_soft_ncut_loss += soft_ncut_loss.detach().item()
+                total_cont_loss += total_cont_loss.detach().item()
                 total_reconstr_loss += reconstruction_loss.detach().item()
                 total_loss += loss.detach().item()
 
                 # Log validation losses
                 self.logger.info("Batch_Index:" + str(index) + " Validation..." +
-                                 "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
-                                 str(reconstruction_loss) + " total_loss: " + str(loss))
+                                 "\n SoftNcutLoss: " + str(soft_ncut_loss) +
+                                 " ContLoss: " + str(cont_loss) +
+                                 " ReconstructionLoss: " + str(reconstruction_loss) +
+                                 " total_loss: " + str(loss))
                 no_patches += 1
 
         # Average the losses
         total_soft_ncut_loss = total_soft_ncut_loss / (no_patches + 1)
+        total_cont_loss = total_cont_loss / (no_patches + 1)
         total_reconstr_loss = total_reconstr_loss / (no_patches + 1)
         total_loss = total_loss / (no_patches + 1)
 
         process = ' Validating'
         self.logger.info("Epoch:" + str(training_index) + process + "..." +
                          "\n SoftNcutLoss:" + str(total_soft_ncut_loss) +
+                         "\n ContLoss:" + str(total_cont_loss) +
                          "\n ReconstructionLoss:" + str(total_reconstr_loss) +
                          "\n total_loss:" + str(total_loss))
 
         write_epoch_summary(writer, epoch, soft_ncut_loss=total_soft_ncut_loss,
+                            cont_loss=total_cont_loss,
                             reconstruction_loss=total_reconstr_loss,
                             total_loss=total_loss)
         if self.wandb is not None:
-            self.wandb.log({"SoftNcutLoss_val": total_soft_ncut_loss, "ReconstructionLoss_val": total_reconstr_loss,
+            self.wandb.log({"SoftNcutLoss_val": total_soft_ncut_loss,
+                            "ContinuityLoss_val": total_reconstr_loss,
+                            "ReconstructionLoss_val": total_reconstr_loss,
                             "total_loss_val": total_loss}, step=epoch)
 
         if self.LOWEST_LOSS > total_loss:  # Save best metric evaluation weights
@@ -465,7 +490,7 @@ class Pipeline:
             overlap,
         )
 
-        aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="crop")
+        aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
         # aggregator2 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
         patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
                                                    num_workers=self.num_worker)
@@ -475,15 +500,17 @@ class Pipeline:
             locations = patches_batch[tio.LOCATION]
 
             with autocast(enabled=self.with_apex):
-                class_preds = self.model(local_batch, ops="enc")
+                class_preds, feature_rep = self.model(local_batch, ops="enc")
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                # ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 class_preds = class_preds.detach().type(local_batch.type())
                 # reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
-                ignore = ignore.detach()
-                class_assignments = class_assignments.detach().type(local_batch.type())
+                # ignore = ignore.detach()
+                # class_assignments = class_assignments.detach().type(local_batch.type())
+                feature_rep = torch.sigmoid(feature_rep)
+                feature_rep = feature_rep.detach().type(local_batch.type())
             # aggregator1.add_batch(class_preds, locations)
-            aggregator1.add_batch(class_assignments, locations)
+            aggregator1.add_batch(feature_rep, locations)
             # aggregator2.add_batch(reconstructed_patch, locations)
 
         class_probs = aggregator1.get_output_tensor()

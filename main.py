@@ -135,6 +135,10 @@ if __name__ == '__main__':
                         type=float,
                         default=1.0,
                         help="loss coefficient for soft ncut loss")
+    parser.add_argument("-cont_loss_coeff",
+                        type=float,
+                        default=0.01,
+                        help="loss coefficient for continuity loss")
     parser.add_argument("-reconstr_loss_coeff",
                         type=float,
                         default=1.0,

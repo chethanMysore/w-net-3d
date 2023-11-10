@@ -370,3 +370,27 @@ def l2_regularisation_loss(model):
         if 'weight' in name:
             l2_reg = l2_reg + param.norm(2)
     return l2_reg
+
+
+class ContinuityLoss(nn.Module):
+    def __init__(self, batch_size=15, patch_size=32, num_classes=1):
+        super(ContinuityLoss, self).__init__()
+        self.batch_size = batch_size
+        self.patch_size = patch_size
+        self.num_classes = num_classes
+        self.cont_width_target = torch.zeros(
+            (batch_size, self.num_classes, patch_size - 1, patch_size, patch_size)).float().cuda()
+        self.cont_length_target = torch.zeros(
+            (batch_size, self.num_classes, patch_size, patch_size - 1, patch_size)).float().cuda()
+        self.cont_depth_target = torch.zeros(
+            (batch_size, self.num_classes, patch_size, patch_size, patch_size - 1)).float().cuda()
+        self.loss = torch.nn.L1Loss()
+
+    def forward(self, class_probs):
+        cont_width_op = class_probs[:, :, 1:, :, :] - class_probs[:, :, 0:-1, :, :]
+        cont_length_op = class_probs[:, :, :, 1:, :] - class_probs[:, :, :, 0:-1, :]
+        cont_depth_op = class_probs[:, :, :, :, 1:] - class_probs[:, :, :, :, 0:-1]
+        continuity_loss_width = self.loss(cont_width_op, self.cont_width_target[:class_probs.shape[0], :, :, :, :].clone())
+        continuity_loss_length = self.loss(cont_length_op, self.cont_length_target[:class_probs.shape[0], :, :, :, :].clone())
+        continuity_loss_depth = self.loss(cont_depth_op, self.cont_depth_target[:class_probs.shape[0], :, :, :, :].clone())
+        return continuity_loss_width + continuity_loss_length + continuity_loss_depth
