@@ -225,19 +225,22 @@ class WNet3D(nn.Module):
 
         self.activation = torch.nn.Softmax(dim=1)
 
+        self.Conv = nn.Conv3d(output_ch, 1, kernel_size=1, stride=1, padding=0)
+
     def forward(self, ip, ip_mask=None, ops="both"):
         encoder_op = self.Encoder(ip)
         if ip_mask is not None:
             encoder_op = ip_mask * encoder_op
         class_prob = self.activation(encoder_op)
+        feature_rep = self.Conv(encoder_op)
         if ops == "enc":
-            return class_prob
+            return class_prob, feature_rep
         reconstructed_op = self.Decoder(class_prob)
         # if ip_mask is not None:
         #     reconstructed_op = torch.amax(ip_mask, dim=1, keepdim=True) * reconstructed_op
         if ops == "dec":
             return reconstructed_op
         if ops == "both":
-            return encoder_op, reconstructed_op
+            return class_prob, feature_rep, reconstructed_op
         else:
             raise ValueError('Invalid ops, ops must be in [enc, dec, both]')
