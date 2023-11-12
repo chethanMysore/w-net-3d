@@ -515,7 +515,7 @@ class Pipeline:
         )
 
         aggregator1 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
-        # aggregator2 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+        aggregator2 = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
         patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
                                                    num_workers=self.num_worker)
 
@@ -527,24 +527,24 @@ class Pipeline:
                 class_preds, feature_rep = self.model(local_batch, ops="enc")
                 feature_rep = torch.sigmoid(feature_rep)
                 # reconstructed_patch = torch.sigmoid(reconstructed_patch)
-                # ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
+                ignore, class_assignments = torch.max(class_preds, 1, keepdim=True)
                 class_preds = class_preds.detach().type(local_batch.type())
                 # reconstructed_patch = reconstructed_patch.detach().type(local_batch.type())
-                # ignore = ignore.detach()
-                # class_assignments = class_assignments.detach().type(local_batch.type())
+                ignore = ignore.detach()
+                class_assignments = class_assignments.detach().type(local_batch.type())
                 feature_rep = feature_rep.detach().type(local_batch.type())
             # aggregator1.add_batch(class_preds, locations)
             aggregator1.add_batch(feature_rep, locations)
-            # aggregator2.add_batch(reconstructed_patch, locations)
+            aggregator2.add_batch(class_assignments, locations)
 
         class_probs = aggregator1.get_output_tensor()
-        # reconstructed_image = aggregator2.get_output_tensor()
+        class_assignments = aggregator2.get_output_tensor()
 
         # to avoid memory errors
         torch.cuda.empty_cache()
 
         torch.save(class_probs, os.path.join(result_root, subjectname + "_class_probs.pth"))
-        # torch.save(reconstructed_image, os.path.join(result_root, subjectname + "_recr.pth"))
+        torch.save(class_assignments, os.path.join(result_root, subjectname + "_class_assignments.pth"))
 
         # save_nifti(class_probs.squeeze().numpy().astype(np.float32),
         #            os.path.join(result_root, subjectname + "_seg_vol.nii.gz"))
