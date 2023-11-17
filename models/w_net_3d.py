@@ -108,14 +108,14 @@ class WNet3dUNetMSS(nn.Module):
         self.Conv = nn.Conv3d(output_ch, 1, kernel_size=1, stride=1, padding=0)
 
     def forward(self, ip, ip_mask=None, ops="both"):
-        encoder_op = self.Encoder(ip)
+        encoder_op = self.Encoder(ip)[0]
         if ip_mask is not None:
             encoder_op = ip_mask * encoder_op
         class_prob = self.activation(encoder_op)
         feature_rep = self.Conv(encoder_op)
         if ops == "enc":
             return class_prob, feature_rep
-        reconstructed_op = self.Decoder(class_prob)
+        reconstructed_op = self.Decoder(class_prob)[0]
         # if ip_mask is not None:
         #     reconstructed_op = torch.amax(ip_mask, dim=1, keepdim=True) * reconstructed_op
         if ops == "dec":
