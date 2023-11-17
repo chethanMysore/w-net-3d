@@ -9,8 +9,8 @@ Purpose :
 import torch.nn
 import torch
 import torch.nn as nn
-from attention_unet3d import AttUnet
-from unet3d import UNet, UNetDeepSup
+from models.attention_unet3d import AttUnet
+from models.unet3d import UNet, UNetDeepSup
 
 __author__ = "Chethan Radhakrishna and Soumick Chatterjee"
 __credits__ = ["Chethan Radhakrishna", "Soumick Chatterjee"]
