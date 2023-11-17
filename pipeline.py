@@ -38,7 +38,7 @@ class Pipeline:
         self.logger = logger
         self.learning_rate = cmd_args.learning_rate
         # self.optimizer = torch.optim.RMSprop(model.parameters(), lr=cmd_args.learning_rate,
-        #                                      weight_decay=cmd_args.learning_rate*10, momentum=cmd_args.learning_rate*100)
+        #                            weight_decay=cmd_args.learning_rate*10, momentum=cmd_args.learning_rate*100)
         if str(cmd_args.use_madam).lower() == "true":
             self.optimizer = Madam(model.parameters(), lr=cmd_args.learning_rate)
         elif str(cmd_args.use_mtadam).lower() == "true":
@@ -145,7 +145,8 @@ class Pipeline:
                                                                pin_memory=True, sampler=sampler)
 
     @staticmethod
-    def create_tio_sub_ds(patch_size, dir_path, stride_length, stride_width, stride_depth, logger, output_path, model_name, is_validate=False,
+    def create_tio_sub_ds(patch_size, dir_path, stride_length, stride_width, stride_depth,
+                          logger, output_path, model_name, is_validate=False,
                           get_subjects_only=False, label_dir_path=None):
         if is_validate:
             validation_ds = SRDataset(logger=logger, patch_size=patch_size,
@@ -252,11 +253,12 @@ class Pipeline:
                         # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                         for index, pred_patch_seg in enumerate(feature_rep):
                             pred_patch_mip = torch.amax(pred_patch_seg, -1)
-                            # Image.fromarray((pred_patch_mip.squeeze().detach().cpu().numpy() * 255).astype('uint8'), 'L').save(
-                            #     os.path.join(self.OUTPUT_PATH, self.model_name + "_patch" + str(index) + "_pred_MIP.tif"))
-                            # Image.fromarray((patches_batch['ground_truth_mip_patch'][
-                            #                                                     index].float().squeeze().detach().cpu().numpy() * 255).astype('uint8'), 'L').save(
-                            #     os.path.join(self.OUTPUT_PATH, self.model_name + "_patch" + str(index) + "_true_MIP.tif"))
+                            # Image.fromarray((pred_patch_mip.squeeze().detach().cpu().numpy() * 255)
+                            # .astype('uint8'), 'L').save(os.path.join(self.OUTPUT_PATH,
+                            # self.model_name + "_patch" + str(index) + "_pred_MIP.tif"))
+                            # Image.fromarray((patches_batch['ground_truth_mip_patch'][index].float().squeeze()
+                            # .detach().cpu().numpy() * 255).astype('uint8'), 'L').save(os.path.join(self.OUTPUT_PATH,
+                            # self.model_name + "_patch" + str(index) + "_true_MIP.tif"))
                             mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
                                                                             patches_batch['ground_truth_mip_patch'][
                                                                                 index].float().cuda())
@@ -401,11 +403,11 @@ class Pipeline:
                             # MIP Loss
                             feature_rep = torch.sigmoid(feature_rep)
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
-                            for index, pred_patch_seg in enumerate(feature_rep):
+                            for idx, pred_patch_seg in enumerate(feature_rep):
                                 pred_patch_mip = torch.amax(pred_patch_seg, -1)
                                 mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
                                                                                 patches_batch['ground_truth_mip_patch'][
-                                                                                    index].float().cuda())
+                                                                                    idx].float().cuda())
                             mip_loss = mip_loss / len(feature_rep)
 
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
@@ -575,12 +577,13 @@ class Pipeline:
 
         self.test(predict_logger, test_subjects=[subject], save_results=True)
 
+    @staticmethod
     def extract_segmentation(self):
         print("Analysing predictions...")
         # result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
         # ignore, class_preds_max = torch.max(class_preds, 0)
         # class_preds_normalised = class_preds_max.numpy().astype(np.uint16)
-        # save_nifti(class_preds_normalised, os.path.join(result_root, self.predictor_subject_name + "_WNET_seg.nii.gz"))
+        # save_nifti(class_preds_normalised,os.path.join(result_root, self.predictor_subject_name + "_WNET_seg.nii.gz"))
 
         # def cal_weight(self, raw_data, shape):
 
@@ -593,7 +596,8 @@ class Pipeline:
         preds = torch.ones(15, num_classes, 32, 32, 32) / num_classes
         const_padding = torch.nn.ConstantPad3d(radius - 1, 0)
         padded_preds = const_padding(preds)
-        # According to the weight formula, when Euclidean distance < r,the weight is 0, so reduce the dissim matrix size to radius-1 to save time and space.
+        # According to the weight formula, when Euclidean distance < r,the weight is 0,
+        # so reduce the dissim matrix size to radius-1 to save time and space.
         print("calculating weights.")
         dissim = torch.zeros(
             (shape[0], shape[1], shape[2], shape[3], shape[4], (radius - 1) * 2 + 1, (radius - 1) * 2 + 1,
