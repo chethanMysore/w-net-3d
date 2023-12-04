@@ -394,7 +394,7 @@ class Pipeline:
                     self.logger.exception(error)
 
                 total_soft_ncut_loss += soft_ncut_loss.detach().item()
-                total_cont_loss += cont_loss.detach().item()
+                total_cont_loss += total_cont_loss.detach().item()
                 total_reconstr_loss += reconstruction_loss.detach().item()
                 total_loss += loss.detach().item()
 
