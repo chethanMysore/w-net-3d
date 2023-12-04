@@ -44,7 +44,7 @@ def write_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, total_
     writer.add_scalar('TotalLoss', total_loss, index)
 
 
-def write_epoch_summary(writer, index, soft_ncut_loss=0, cont_loss=0, reconstruction_loss=0, reg_loss=0, total_loss=0):
+def write_epoch_summary(writer, index, soft_ncut_loss=0, reconstruction_loss=0, reg_loss=0, total_loss=0):
     """
     Method to write summary to the tensorboard.
     index: global_index for the visualisation
@@ -52,7 +52,6 @@ def write_epoch_summary(writer, index, soft_ncut_loss=0, cont_loss=0, reconstruc
     """
     print('Writing Epoch Summary...')
     writer.add_scalar('SoftNcutLossPerEpoch', soft_ncut_loss, index)
-    writer.add_scalar('ContLossPerEpoch', cont_loss, index)
     writer.add_scalar('ReconstructionLossPerEpoch', reconstruction_loss, index)
     writer.add_scalar('RegularisationLossPerEpoch', reg_loss, index)
     writer.add_scalar('TotalLossPerEpoch', total_loss, index)
