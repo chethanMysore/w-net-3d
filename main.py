@@ -149,6 +149,10 @@ if __name__ == '__main__':
                         type=float,
                         default=0.3,
                         help="loss coefficient for maximum intensity projection loss")
+    parser.add_argument("-mip_axis",
+                        type=str,
+                        default="z",
+                        help="Set projection axis. Default is z-axis. use axis in [x, y, z] or 'multi'")
     parser.add_argument("-reg_alpha",
                         type=float,
                         default=0.001,

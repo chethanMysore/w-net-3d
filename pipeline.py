@@ -95,6 +95,7 @@ class Pipeline:
         self.reconstruction_loss = ReconstructionLoss(recr_loss_model_path=cmd_args.recr_loss_model_path,
                                                       loss_type="L1")
         self.mip_loss = FocalTverskyLoss()
+        self.mip_axis = cmd_args.mip_axis
         # self.dice = Dice()
         # self.focalTverskyLoss = FocalTverskyLoss()
         # self.iou = IOU()
@@ -252,17 +253,34 @@ class Pipeline:
                         feature_rep = torch.sigmoid(feature_rep)
                         # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                         for index, pred_patch_seg in enumerate(feature_rep):
-                            pred_patch_mip = torch.amax(pred_patch_seg, -1)
+                            # pred_patch_mip = torch.amax(pred_patch_seg, -1)
                             # Image.fromarray((pred_patch_mip.squeeze().detach().cpu().numpy() * 255)
                             # .astype('uint8'), 'L').save(os.path.join(self.OUTPUT_PATH,
                             # self.model_name + "_patch" + str(index) + "_pred_MIP.tif"))
                             # Image.fromarray((patches_batch['ground_truth_mip_patch'][index].float().squeeze()
                             # .detach().cpu().numpy() * 255).astype('uint8'), 'L').save(os.path.join(self.OUTPUT_PATH,
                             # self.model_name + "_patch" + str(index) + "_true_MIP.tif"))
-                            mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
-                                                                            patches_batch['ground_truth_mip_patch'][
-                                                                                index].float().cuda())
-                        mip_loss = mip_loss / len(feature_rep)
+                            if self.mip_axis == "multi":
+                                pred_patch_mip_z = torch.amax(pred_patch_seg, -1)
+                                pred_patch_mip_y = torch.amax(pred_patch_seg, 2)
+                                pred_patch_mip_x = torch.amax(pred_patch_seg, 1)
+                                mip_loss += (0.33 * self.mip_loss(pred_patch_mip_z,
+                                             patches_batch['ground_truth_mip_z_patch'][index].float().cuda()) +
+                                             0.33 * self.mip_loss(pred_patch_mip_y,
+                                             patches_batch['ground_truth_mip_y_patch'][index].float().cuda()) +
+                                             0.33 * self.mip_loss(pred_patch_mip_x,
+                                             patches_batch['ground_truth_mip_x_patch'][index].float().cuda()))
+                            else:
+                                axis = -1
+                                if self.mip_axis == "x":
+                                    axis = 1
+                                if self.mip_axis == "y":
+                                    axis = 2
+                                pred_patch_mip = torch.amax(pred_patch_seg, axis)
+                                mip_loss += (self.mip_loss(pred_patch_mip,
+                                             patches_batch[str.format('ground_truth_mip_{}_patch', self.mip_axis)]
+                                             [index].float().cuda()))
+                    mip_loss = self.mip_loss_coeff * (mip_loss / len(feature_rep))
 
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
                     reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
@@ -404,11 +422,31 @@ class Pipeline:
                             feature_rep = torch.sigmoid(feature_rep)
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                             for idx, pred_patch_seg in enumerate(feature_rep):
-                                pred_patch_mip = torch.amax(pred_patch_seg, -1)
-                                mip_loss += self.mip_loss_coeff * self.mip_loss(pred_patch_mip,
-                                                                                patches_batch['ground_truth_mip_patch'][
-                                                                                    idx].float().cuda())
-                            mip_loss = mip_loss / len(feature_rep)
+                                if self.mip_axis == "multi":
+                                    pred_patch_mip_z = torch.amax(pred_patch_seg, -1)
+                                    pred_patch_mip_y = torch.amax(pred_patch_seg, 2)
+                                    pred_patch_mip_x = torch.amax(pred_patch_seg, 1)
+                                    mip_loss += (0.33 * self.mip_loss(pred_patch_mip_z,
+                                                                      patches_batch['ground_truth_mip_z_patch'][
+                                                                          idx].float().cuda()) +
+                                                 0.33 * self.mip_loss(pred_patch_mip_y,
+                                                                      patches_batch['ground_truth_mip_y_patch'][
+                                                                          idx].float().cuda()) +
+                                                 0.33 * self.mip_loss(pred_patch_mip_x,
+                                                                      patches_batch['ground_truth_mip_x_patch'][
+                                                                          idx].float().cuda()))
+                                else:
+                                    axis = -1
+                                    if self.mip_axis == "x":
+                                        axis = 1
+                                    if self.mip_axis == "y":
+                                        axis = 2
+                                    pred_patch_mip = torch.amax(pred_patch_seg, axis)
+                                    mip_loss += (self.mip_loss(pred_patch_mip,
+                                                               patches_batch[str.format('ground_truth_mip_{}_patch',
+                                                                                        self.mip_axis)]
+                                                               [idx].float().cuda()))
+                        mip_loss = self.mip_loss_coeff * (mip_loss / len(feature_rep))
 
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
