@@ -14,6 +14,7 @@ import torch.utils.data
 from torch.utils.tensorboard import SummaryWriter
 
 from pipeline import Pipeline
+from cross_validation_pipeline import CrossValidationPipeline
 from utils.logger import Logger
 from utils.model_manager import get_model
 
@@ -90,6 +91,9 @@ if __name__ == '__main__':
     parser.add_argument('-apex',
                         default=True,
                         help="To use half precision on model weights.")
+    parser.add_argument('-cross_validate',
+                        default=False,
+                        help="To train with k-fold cross validation")
     parser.add_argument("-num_conv",
                         type=int,
                         default=3,
@@ -172,6 +176,18 @@ if __name__ == '__main__':
                         type=int,
                         default=4,
                         help="SigmaX")
+    parser.add_argument("-init_thresh",
+                        type=int,
+                        default=3,
+                        help="Initial histogram threshold (in %)")
+    parser.add_argument("-fold_index",
+                        type=str,
+                        default="",
+                        help="fold index")
+    parser.add_argument("-k_folds",
+                        type=int,
+                        default=5,
+                        help="number of folds")
     parser.add_argument("-wandb",
                         default=True,
                         help="Set this to true to include wandb logging")
@@ -179,7 +195,7 @@ if __name__ == '__main__':
                         default=False,
                         help="Set this to true to include wandb logging")
     parser.add_argument("-with_mip",
-                        default=True,
+                        default=False,
                         help="Set this to true to train with mip loss")
     parser.add_argument("-use_madam",
                         default=False,
@@ -253,14 +269,20 @@ if __name__ == '__main__':
     writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)
     writer_validating = SummaryWriter(TENSORBOARD_PATH_VALIDATION)
 
-    pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
-                        dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
-                        writer_training=writer_training, writer_validating=writer_validating, wandb=wandb)
+    if str(args.cross_validate).lower() == "true":
+        pipeline = CrossValidationPipeline(cmd_args=args, model=model, logger=logger,
+                                           dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
+                                           writer_training=writer_training, writer_validating=writer_validating,
+                                           wandb=wandb)
+    else:
+        pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
+                            dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
+                            writer_training=writer_training, writer_validating=writer_validating, wandb=wandb)
 
     # loading existing checkpoint if supplied
     if bool(LOAD_PATH):
         torch.cuda.empty_cache()
-        pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
+        pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best, fold_index=args.fold_index)
         torch.cuda.empty_cache()
 
     try:
@@ -271,13 +293,13 @@ if __name__ == '__main__':
 
         if args.test:
             if args.load_best:
-                pipeline.load(load_best=True)
+                pipeline.load(load_best=True, fold_index=args.fold_index)
             pipeline.test(test_logger=test_logger)
             torch.cuda.empty_cache()  # to avoid memory errors
 
         if args.predict:
             if args.load_best:
-                pipeline.load(load_best=True)
+                pipeline.load(load_best=True, fold_index=args.fold_index)
             pipeline.predict(predict_logger=test_logger, image_path=args.predictor_path,
                              label_path=args.predictor_label_path)
             # class_preds = torch.load(args.predictor_path)

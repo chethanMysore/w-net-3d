@@ -38,7 +38,7 @@ class SRDataset(Dataset):
     def __init__(self, logger, patch_size, dir_path, output_path, model_name, stride_depth=16, stride_length=32,
                  stride_width=32,
                  label_dir_path=None, size=None, fly_under_percent=None, patch_size_us=None, return_coords=False,
-                 pad_patch=True, pre_interpolate=None, norm_data=True, pre_load=False, files_us=None):
+                 pad_patch=True, pre_interpolate=None, norm_data=True, pre_load=False, files_us=None, threshold=3):
         self.label_dir_path = label_dir_path
         self.patch_size = patch_size
         self.stride_depth = stride_depth
@@ -126,7 +126,7 @@ class SRDataset(Dataset):
                 img_data = image_file.data.numpy().astype(np.float64)
                 bins = torch.arange(img_data.min(), img_data.max() + 2, dtype=torch.float64)
                 histogram, bin_edges = np.histogram(img_data, int(img_data.max() + 2))
-                init_threshold = bin_edges[int(len(bins) - 0.97 * len(bins))]
+                init_threshold = bin_edges[int(len(bins) - (1-(threshold*0.01)) * len(bins))]
                 img_data = torch.from_numpy(img_data).type(torch.float64)
                 img_data = torch.where((img_data <= init_threshold), 0.0, img_data)
                 save_nifti(img_data.squeeze().numpy().astype(np.float32),
