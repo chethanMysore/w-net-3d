@@ -193,7 +193,7 @@ class UNet(nn.Module):
         # print(out.shape)
         # d1 = self.active(out)
 
-        return [out]
+        return out
 
 
 class UNetDeepSup(nn.Module):
@@ -318,4 +318,4 @@ class UNetDeepSup(nn.Module):
         # print(out.shape)
         # d1 = self.active(out)
 
-        return [out, d3_out, d4_out]
+        return out
