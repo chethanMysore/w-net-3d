@@ -13,7 +13,7 @@ import torch
 import torch.utils.data
 from torch.utils.tensorboard import SummaryWriter
 from evaluation.metrics import SoftNCutsLoss, ReconstructionLoss
-from models.w_net_3d import WNet3D
+from utils.model_manager import get_model
 from pipeline import Pipeline
 from utils.logger import Logger
 
@@ -35,6 +35,12 @@ random.seed(2022)
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("-model",
+                        type=int,
+                        default=3,
+                        help="1{U-Net}; \n"
+                             "2{U-Net_Deepsup}; \n"
+                             "3{Attention-U-Net};")
     parser.add_argument("-model_name",
                         default="Model_v1",
                         help="Name of the model")
@@ -228,7 +234,7 @@ if __name__ == '__main__':
 
 
     # models
-    model = torch.nn.DataParallel(WNet3D(output_ch=args.num_classes))
+    model = torch.nn.DataParallel(get_model(model_no=args.model, output_ch=args.num_classes))
     model.cuda()
 
     writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)

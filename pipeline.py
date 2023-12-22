@@ -235,7 +235,7 @@ class Pipeline:
                 self.optimizer.zero_grad()
 
                 with autocast(enabled=self.with_apex):
-                    class_preds, reconstructed_patch = self.model(local_batch, ops="both")
+                    class_preds, feature_map, reconstructed_patch = self.model(local_batch, ops="both")
                     soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                     soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
                     reconstructed_patch = torch.sigmoid(reconstructed_patch)
@@ -360,7 +360,7 @@ class Pipeline:
                 try:
                     with autocast(enabled=self.with_apex):
                         # Get the classification response map(normalized) and respective class assignments after argmax
-                        class_preds, reconstructed_patch = self.model(local_batch, ops="both")
+                        class_preds, feature_map, reconstructed_patch = self.model(local_batch, ops="both")
                         soft_ncut_loss = self.soft_ncut_loss(local_batch, class_preds)
                         soft_ncut_loss = self.s_ncut_loss_coeff * soft_ncut_loss.mean()
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
