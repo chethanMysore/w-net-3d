@@ -369,7 +369,7 @@ class CrossValidationPipeline:
                                                                patches_batch[str.format('ground_truth_mip_{}_patch',
                                                                                         self.mip_axis)]
                                                                [index].float().cuda()))
-                        mip_loss = self.mip_loss_coeff * (mip_loss / len(feature_rep))
+                            mip_loss = self.mip_loss_coeff * (mip_loss / len(feature_rep))
 
                         reconstructed_patch = torch.sigmoid(reconstructed_patch)
                         reconstruction_loss = self.reconstr_loss_coeff * self.reconstruction_loss(reconstructed_patch,
