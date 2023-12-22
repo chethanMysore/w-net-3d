@@ -147,7 +147,7 @@ class CrossValidationPipeline:
                 self.logger.info("mip loss coefficient " + str(self.mip_loss_coeff))
         if cmd_args.training_mode != "unsupervised":
             self.label_dir_path_train = self.DATASET_PATH + '/train_label/'
-            self.label_dir_path_val = self.DATASET_PATH + '/validate_label/'
+            self.label_dir_path_val = self.DATASET_PATH + '/train_label/'
         else:
             self.label_dir_path_train, self.label_dir_path_val = None, None
 
@@ -291,7 +291,7 @@ class CrossValidationPipeline:
             train_loader = torch.utils.data.DataLoader(training_set, batch_size=self.batch_size,
                                                        num_workers=self.num_worker,
                                                        sampler=sampler, pin_memory=True)
-            validation_set = CrossValidationPipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/validate/',
+            validation_set = CrossValidationPipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/train/',
                                                                        label_dir_path=self.label_dir_path_val,
                                                                        output_path=self.OUTPUT_PATH,
                                                                        model_name=self.model_name,
@@ -488,7 +488,7 @@ class CrossValidationPipeline:
         self.model.eval()
         data_loader = validate_loader
         if data_loader is None:
-            validation_set = CrossValidationPipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/validate/',
+            validation_set = CrossValidationPipeline.create_tio_sub_ds(dir_path=self.DATASET_PATH + '/train/',
                                                                        label_dir_path=self.label_dir_path_val,
                                                                        output_path=self.OUTPUT_PATH,
                                                                        model_name=self.model_name,
