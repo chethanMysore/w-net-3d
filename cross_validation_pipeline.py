@@ -11,6 +11,7 @@ Features:
 """
 
 import random
+import sys
 
 import torch
 import torch.utils.data
@@ -400,6 +401,8 @@ class CrossValidationPipeline:
                                         str(reconstruction_loss) + "MIP-Loss: " + str(mip_loss) + " reg_loss: " + str(
                                             reg_loss)
                                         + " total_loss: " + str(loss))
+                                    torch.save(local_batch, os.path.join(self.OUTPUT_PATH, self.model_name + "nan_batch.pth"))
+                                    sys.exit()
 
                             # self.scaler.scale(loss).backward()
                             if self.clip_grads:
@@ -667,7 +670,8 @@ class CrossValidationPipeline:
         torch.cuda.empty_cache()
 
         torch.save(class_probs, os.path.join(result_root, subjectname + "_fold_" + fold + "_class_probs.pth"))
-        torch.save(class_assignments, os.path.join(result_root, subjectname + "_fold_" + fold + "_class_assignments.pth"))
+        torch.save(class_assignments,
+                   os.path.join(result_root, subjectname + "_fold_" + fold + "_class_assignments.pth"))
 
         class_probs = class_probs.squeeze().numpy()
         thresh = threshold_otsu(class_probs)
@@ -685,7 +689,7 @@ class CrossValidationPipeline:
         temp_data = img_data.data.numpy().astype(np.float64)
         bins = torch.arange(temp_data.min(), temp_data.max() + 2, dtype=torch.float64)
         histogram, bin_edges = np.histogram(temp_data, int(temp_data.max() + 2))
-        init_threshold = bin_edges[int(len(bins) - (1-(self.init_thresh*0.01)) * len(bins))]
+        init_threshold = bin_edges[int(len(bins) - (1 - (self.init_thresh * 0.01)) * len(bins))]
         img_data.data = torch.where((img_data.data) <= init_threshold, 0.0, img_data.data)
 
         sub_dict = {
