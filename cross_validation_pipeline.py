@@ -391,7 +391,16 @@ class CrossValidationPipeline:
                                         self.scaler.scale(loss[i]).backward(retain_graph=True)
                                 loss = torch.mean(loss)
                             else:
-                                self.scaler.scale(loss).backward()
+                                try:
+                                    self.scaler.scale(loss).backward()
+                                except:
+                                    self.logger.info(
+                                        "Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
+                                        "\n SoftNcutLoss: " + str(soft_ncut_loss) + " ReconstructionLoss: " +
+                                        str(reconstruction_loss) + "MIP-Loss: " + str(mip_loss) + " reg_loss: " + str(
+                                            reg_loss)
+                                        + " total_loss: " + str(loss))
+
                             # self.scaler.scale(loss).backward()
                             if self.clip_grads:
                                 self.scaler.unscale_(self.optimizer)
