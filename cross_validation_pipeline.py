@@ -211,12 +211,9 @@ class CrossValidationPipeline:
 
     @staticmethod
     def normaliser(batch):
-        """
-        Purpose: Normalise pixel intensities by comparing max values in the 3D patch
-        :param batch: 5D array (batch_size x channel x width x depth x height)
-        """
         for i in range(batch.shape[0]):
-            batch[i] = batch[i] / batch[i].max()
+            if batch[i].max() > 0.0:
+                batch[i] = batch[i] / batch[i].max()
         return batch
 
     def load(self, checkpoint_path=None, load_best=True, fold_index=""):
@@ -401,7 +398,7 @@ class CrossValidationPipeline:
                                         str(reconstruction_loss) + "MIP-Loss: " + str(mip_loss) + " reg_loss: " + str(
                                             reg_loss)
                                         + " total_loss: " + str(loss))
-                                    torch.save(local_batch, os.path.join(self.OUTPUT_PATH, self.model_name + "nan_batch.pth"))
+                                    torch.save(local_batch, os.path.join(self.OUTPUT_PATH, self.model_name + "/results/nan_batch.pth"))
                                     sys.exit()
 
                             # self.scaler.scale(loss).backward()
