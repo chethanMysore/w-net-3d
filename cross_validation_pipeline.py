@@ -51,8 +51,6 @@ class CrossValidationPipeline:
         :param checkpoint_path: Path to saved model state dictionary
         :param writer_training: Initialized train writer
         :param writer_validating: Initialized validation writer
-        :param test_logger: Initialized file logger for testing
-        :param test_set: If specified, will be used explicitly for testing
         :param wandb: Initialized 'Weights and Biases' configuration for logging
         """
         self.model = model
@@ -623,7 +621,7 @@ class CrossValidationPipeline:
                     'optimizer': self.optimizer.state_dict(),
                     'amp': None}, fold_index=fold_index)
 
-    def test(self, test_logger, test_subjects=None, save_results=True, fold=""):
+    def test(self, test_logger, test_subjects=None, save_results=True, fold_index=""):
         test_logger.debug('Testing...')
         self.model.eval()
         result_root = os.path.join(self.OUTPUT_PATH, self.model_name, "results")
@@ -666,9 +664,9 @@ class CrossValidationPipeline:
         # to avoid memory errors
         torch.cuda.empty_cache()
 
-        torch.save(class_probs, os.path.join(result_root, subjectname + "_fold_" + fold + "_class_probs.pth"))
+        torch.save(class_probs, os.path.join(result_root, subjectname + "_fold_" + fold_index + "_class_probs.pth"))
         torch.save(class_assignments,
-                   os.path.join(result_root, subjectname + "_fold_" + fold + "_class_assignments.pth"))
+                   os.path.join(result_root, subjectname + "_fold_" + fold_index + "_class_assignments.pth"))
 
         class_probs = class_probs.squeeze().numpy()
         thresh = threshold_otsu(class_probs)
@@ -676,9 +674,9 @@ class CrossValidationPipeline:
         footprint = ball(1)
         class_probs = area_opening(class_probs, area_threshold=32)
         class_probs = dilation(class_probs, footprint)
-        save_nifti(class_probs.astype("uint16"), os.path.join(result_root, subjectname + "_fold_" + fold + ".nii.gz"))
+        save_nifti(class_probs.astype("uint16"), os.path.join(result_root, subjectname + "_fold_" + fold_index + ".nii.gz"))
 
-    def predict(self, image_path, label_path, predict_logger):
+    def predict(self, image_path, label_path, predict_logger, fold_index=""):
         image_name = os.path.basename(image_path).split('.')[0]
         img_data = tio.ScalarImage(image_path)
         img_data.data = img_data.data.type(torch.float64)
@@ -700,4 +698,4 @@ class CrossValidationPipeline:
 
         subject = tio.Subject(**sub_dict)
 
-        self.test(predict_logger, test_subjects=[subject], save_results=True)
+        self.test(predict_logger, test_subjects=[subject], save_results=True, fold_index=fold_index)

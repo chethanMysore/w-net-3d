@@ -301,7 +301,7 @@ if __name__ == '__main__':
             if args.load_best:
                 pipeline.load(load_best=True, fold_index=args.fold_index)
             pipeline.predict(predict_logger=test_logger, image_path=args.predictor_path,
-                             label_path=args.predictor_label_path)
+                             label_path=args.predictor_label_path, fold_index=args.fold_index)
             # class_preds = torch.load(args.predictor_path)
             # pipeline.extract_segmentation(class_preds)
         if args.testing_validation:
