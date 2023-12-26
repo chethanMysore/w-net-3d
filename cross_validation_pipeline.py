@@ -664,9 +664,9 @@ class CrossValidationPipeline:
         # to avoid memory errors
         torch.cuda.empty_cache()
 
-        # torch.save(class_probs, os.path.join(result_root, subjectname + "_fold_" + fold_index + "_class_probs.pth"))
-        # torch.save(class_assignments,
-        #            os.path.join(result_root, subjectname + "_fold_" + fold_index + "_class_assignments.pth"))
+        torch.save(class_probs, os.path.join(result_root, subjectname + "_fold_" + fold_index + "_class_probs.pth"))
+        torch.save(class_assignments,
+                   os.path.join(result_root, subjectname + "_fold_" + fold_index + "_class_assignments.pth"))
 
         class_probs = class_probs.squeeze().numpy()
         thresh = threshold_otsu(class_probs)
